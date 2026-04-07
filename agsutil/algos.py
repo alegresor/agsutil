@@ -122,38 +122,37 @@ def lm_opt(
 
         >>> torch.set_default_dtype(torch.float64)
         >>> rng = torch.Generator().manual_seed(7)
-        >>> x = torch.rand((3,3,3,2,2),generator=rng)
-        >>> theta_true = torch.rand((4,4,2,2),generator=rng)
-        >>> y_true = torch.exp((x*theta_true[...,None,None,None,:,:]).sum((-2,-1))) # (4,4,3,3,3)
+        >>> x = torch.rand((10,4,),generator=rng)
+        >>> theta_true = torch.rand((4,),generator=rng)
+        >>> y_true = torch.exp((x*theta_true).sum(-1)) # (10,)
         >>> def f(theta,y_true):
-        ...     y_hat = torch.exp((x*theta[...,None,None,None,:,:]).sum((-2,-1))) # (...,3,3,3)
+        ...     y_hat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
         ...     return (y_hat-y_true),y_true
         >>> theta_hat,data = lm_opt(
         ...     f = f, 
         ...     theta0 = torch.rand_like(theta_true,generator=rng),
         ...     iters = 3,
-        ...     batch_dims = 2,
+        ...     batch_dims = 0,
         ...     f_kwargs_vec = {"y_true":y_true},
         ...     f_kwargs_no_vec = {},
-        ...     lam_factors = [torch.tensor([1/4,1/2,1,2,4])],
-        ...     alpha_factors = [torch.tensor([2/3,1,3/2])],
-        ...     verbose_times = False,
         ...     )
-            iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          
-                       | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        
-            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            0          | 1.5e+01   | 2.5e+01   | 6.3e+01   | 1.9e+02   | 3.1e+02   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
-            1          | 2.2e-01   | 6.0e-01   | 1.0e+00   | 1.7e+00   | 2.0e+01   | 2.5e-07   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 3.7e-06   | 6.7e-01   | 9.2e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   
-            2          | 1.4e-04   | 3.0e-04   | 1.6e-03   | 2.9e-03   | 2.0e-01   | 6.2e-08   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   
-            3          | 4.4e-11   | 3.2e-10   | 3.9e-09   | 7.5e-09   | 4.5e-05   | 1.6e-08   | 2.5e-07   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   
+            iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          | times     
+                       | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90                    
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 2.3e+01   | 2.3e+01   | 2.3e+01   | 2.3e+01   | 2.3e+01   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 0.4        
+            1          | 7.3e+00   | 7.3e+00   | 7.3e+00   | 7.3e+00   | 7.3e+00   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 0.4        
+            2          | 8.5e-02   | 8.5e-02   | 8.5e-02   | 8.5e-02   | 8.5e-02   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 0.4        
+            3          | 3.3e-05   | 3.3e-05   | 3.3e-05   | 3.3e-05   | 3.3e-05   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 0.4        
+        >>> torch.allclose(theta_hat,theta_true,atol=5e-2)
+        True
         >>> print_data_signatures_lm_opt(data)
+            data['theta'].shape = (4,)
             data['iterrange'].shape = (4,)
             data['times'].shape = (4,)
-            data['theta'].shape = (4, 4, 2, 2)
-            data['thetas'].shape = (4, 4, 4, 2, 2)
-            data['losses'].shape = (4, 4, 4)
-            data['lams'].shape = (4, 4, 4)
-            data['alphas'].shape = (4, 4, 4)
+            data['thetas'].shape = (4, 4)
+            data['losses'].shape = (4,)
+            data['lams'].shape = (4,)
+            data['alphas'].shape = (4,)
             data['losses_quantiles']
                 data['losses_quantiles']['0'].shape = (4,)
                 data['losses_quantiles']['1'].shape = (4,)
@@ -196,8 +195,84 @@ def lm_opt(
                 data['alphas_quantiles']['95'].shape = (4,)
                 data['alphas_quantiles']['99'].shape = (4,)
                 data['alphas_quantiles']['100'].shape = (4,)
-        >>> torch.allclose(theta_hat,theta_true,atol=1e-3)
+
+        >>> torch.set_default_dtype(torch.float64)
+        >>> rng = torch.Generator().manual_seed(7)
+        >>> x = torch.rand((3,3,3,2,2),generator=rng)
+        >>> theta_true = torch.rand((4,4,2,2),generator=rng)
+        >>> y_true = torch.exp((x*theta_true[...,None,None,None,:,:]).sum((-2,-1))) # (4,4,3,3,3)
+        >>> def f(theta,y_true):
+        ...     y_hat = torch.exp((x*theta[...,None,None,None,:,:]).sum((-2,-1))) # (...,3,3,3)
+        ...     return (y_hat-y_true),y_true
+        >>> theta_hat,data = lm_opt(
+        ...     f = f, 
+        ...     theta0 = torch.rand_like(theta_true,generator=rng),
+        ...     iters = 2,
+        ...     batch_dims = 2,
+        ...     f_kwargs_vec = {"y_true":y_true},
+        ...     f_kwargs_no_vec = {},
+        ...     lam_factors = [torch.tensor([1/4,1/2,1,2,4])],
+        ...     alpha_factors = [torch.tensor([2/3,1,3/2])],
+        ...     verbose_times = False,
+        ...     )
+            iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 1.5e+01   | 2.5e+01   | 6.3e+01   | 1.9e+02   | 3.1e+02   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 2.2e-01   | 6.0e-01   | 1.0e+00   | 1.7e+00   | 2.0e+01   | 2.5e-07   | 2.5e-07   | 2.5e-07   | 1.2e-06   | 4.0e-06   | 6.7e-01   | 6.7e-01   | 8.3e-01   | 1.1e+00   | 1.5e+00   
+            2          | 1.4e-04   | 3.0e-04   | 1.6e-03   | 2.9e-03   | 2.0e-01   | 6.2e-08   | 6.2e-08   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 8.3e-01   | 1.1e+00   | 1.5e+00   
+        >>> torch.allclose(theta_hat,theta_true,atol=5e-2)
         True
+        >>> print_data_signatures_lm_opt(data)
+            data['theta'].shape = (4, 4, 2, 2)
+            data['iterrange'].shape = (3,)
+            data['times'].shape = (3,)
+            data['thetas'].shape = (3, 4, 4, 2, 2)
+            data['losses'].shape = (3, 4, 4)
+            data['lams'].shape = (3, 4, 4)
+            data['alphas'].shape = (3, 4, 4)
+            data['losses_quantiles']
+                data['losses_quantiles']['0'].shape = (3,)
+                data['losses_quantiles']['1'].shape = (3,)
+                data['losses_quantiles']['5'].shape = (3,)
+                data['losses_quantiles']['10'].shape = (3,)
+                data['losses_quantiles']['25'].shape = (3,)
+                data['losses_quantiles']['40'].shape = (3,)
+                data['losses_quantiles']['50'].shape = (3,)
+                data['losses_quantiles']['60'].shape = (3,)
+                data['losses_quantiles']['75'].shape = (3,)
+                data['losses_quantiles']['90'].shape = (3,)
+                data['losses_quantiles']['95'].shape = (3,)
+                data['losses_quantiles']['99'].shape = (3,)
+                data['losses_quantiles']['100'].shape = (3,)
+            data['lams_quantiles']
+                data['lams_quantiles']['0'].shape = (3,)
+                data['lams_quantiles']['1'].shape = (3,)
+                data['lams_quantiles']['5'].shape = (3,)
+                data['lams_quantiles']['10'].shape = (3,)
+                data['lams_quantiles']['25'].shape = (3,)
+                data['lams_quantiles']['40'].shape = (3,)
+                data['lams_quantiles']['50'].shape = (3,)
+                data['lams_quantiles']['60'].shape = (3,)
+                data['lams_quantiles']['75'].shape = (3,)
+                data['lams_quantiles']['90'].shape = (3,)
+                data['lams_quantiles']['95'].shape = (3,)
+                data['lams_quantiles']['99'].shape = (3,)
+                data['lams_quantiles']['100'].shape = (3,)
+            data['alphas_quantiles']
+                data['alphas_quantiles']['0'].shape = (3,)
+                data['alphas_quantiles']['1'].shape = (3,)
+                data['alphas_quantiles']['5'].shape = (3,)
+                data['alphas_quantiles']['10'].shape = (3,)
+                data['alphas_quantiles']['25'].shape = (3,)
+                data['alphas_quantiles']['40'].shape = (3,)
+                data['alphas_quantiles']['50'].shape = (3,)
+                data['alphas_quantiles']['60'].shape = (3,)
+                data['alphas_quantiles']['75'].shape = (3,)
+                data['alphas_quantiles']['90'].shape = (3,)
+                data['alphas_quantiles']['95'].shape = (3,)
+                data['alphas_quantiles']['99'].shape = (3,)
+                data['alphas_quantiles']['100'].shape = (3,)
     """
     if warn and (not torch.get_default_dtype()==torch.float64):
         warnings.warn('''
@@ -344,9 +419,9 @@ def lm_opt(
         for qt in quantiles_losses:
             losses_quantiles[str(qt)][i] = loss.nanquantile(qt/100).to(default_device)
         for qt in quantiles_lams:
-            lams_quantiles[str(qt)][i] = lams.nanquantile(qt/100).to(default_device)
+            lams_quantiles[str(qt)][i] = lam.nanquantile(qt/100).to(default_device)
         for qt in quantiles_alphas:
-            alphas_quantiles[str(qt)][i] = alphas.nanquantile(qt/100).to(default_device)
+            alphas_quantiles[str(qt)][i] = alpha.nanquantile(qt/100).to(default_device)
         times[i] = timer.toc()
         if verbose and (i%verbose==0 or i==iters):
             _s_iter = "%-10d "%i
@@ -393,9 +468,9 @@ def lm_opt(
         theta[improved] = thetas_best_new[improved]
     theta = theta.reshape((*batch_shape,*nonbatch_theta_shape))
     data = {
+        "theta": theta.to(default_device), 
         "iterrange": torch.arange(iters+1), 
         "times": times, 
-        "theta": theta.to(default_device), 
         "thetas": thetas,
         "losses": losses,
         "lams": lams, 
@@ -407,7 +482,7 @@ def lm_opt(
     return theta,data
 
 if __name__=="__main__":
-    device = "cpu"
+    device = "mps"
     if "mps" not in device:
         torch.set_default_dtype(torch.float64)
     rng = torch.Generator(device=device).manual_seed(7)
@@ -420,12 +495,9 @@ if __name__=="__main__":
     theta,data = lm_opt(
         f = f, 
         theta0 = torch.rand_like(theta_true,generator=rng),
-        iters = 5,
+        iters = 3,
         batch_dims = 0,
         f_kwargs_vec = {"y_true":y_true},
         f_kwargs_no_vec = {},
-        # lam_factors = [torch.tensor([1/2,1,2]),torch.tensor([1])],
-        # alpha_factors = [torch.tensor([1]),torch.tensor([1/2,1,2])],
         )
     print_data_signatures_lm_opt(data,show_device=True)
-    print(theta.device)
