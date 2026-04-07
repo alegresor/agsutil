@@ -1,2 +1,3 @@
-# torchags
-PyTorch Based Automated Gradient Solvers
+# `torchags`: PyTorch Automated Gradient Solvers
+
+Various algorithm utilities in PyTorch.
