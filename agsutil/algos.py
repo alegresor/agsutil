@@ -69,6 +69,7 @@ def lm_opt(
         verbose_quantiles_losses = [5,25,50,75,90],
         verbose_quantiles_lams =   [5,25,50,75,90],
         verbose_quantiles_alphas = [5,25,50,75,90],
+        verbose_times = True, 
         warn = True,
         ):
     r"""
@@ -110,6 +111,7 @@ def lm_opt(
         verbose_quantiles_losses (list): Loss quantiles to show in verbose log.
         verbose_quantiles_lams (list): $\lambda$ quantiles to show in verbose log.
         verbose_quantiles_alphas (list): $\alpha$ quantiles to show in verbose log.
+        verbose_times (bool): If `False`, do not show the times in the verbose log. This is mostly for testing where timing is not reproducible. 
         warn (bool): If `False`, then suppress warnings.
     
     Returns:
@@ -135,16 +137,17 @@ def lm_opt(
         ...     f_kwargs_no_vec = {},
         ...     lam_factors = [torch.tensor([1/4,1/2,1,2,4])],
         ...     alpha_factors = [torch.tensor([2/3,1,3/2])],
+        ...     verbose_times = False,
         ...     )
-            iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          | times     
-                       | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90                    
-            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            0          | 1.5e+01   | 2.5e+01   | 6.3e+01   | 1.9e+02   | 3.1e+02   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | ...        
-            1          | 2.2e-01   | 6.0e-01   | 1.0e+00   | 1.7e+00   | 2.0e+01   | 2.5e-07   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 3.7e-06   | 6.7e-01   | 9.2e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   | ...        
-            2          | 1.4e-04   | 3.0e-04   | 1.6e-03   | 2.9e-03   | 2.0e-01   | 6.2e-08   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   | ...        
-            3          | 4.4e-11   | 3.2e-10   | 3.9e-09   | 7.5e-09   | 4.5e-05   | 1.6e-08   | 2.5e-07   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   | ...        
-            4          | 5.1e-24   | 6.4e-22   | 1.6e-20   | 9.6e-20   | 3.1e-12   | 7.6e-09   | 6.2e-08   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   | ...        
-            5          | 1.0e-30   | 1.6e-30   | 3.8e-30   | 1.3e-29   | 1.6e-26   | 3.4e-09   | 1.6e-08   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   | ...        
+            iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 1.5e+01   | 2.5e+01   | 6.3e+01   | 1.9e+02   | 3.1e+02   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 2.2e-01   | 6.0e-01   | 1.0e+00   | 1.7e+00   | 2.0e+01   | 2.5e-07   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 3.7e-06   | 6.7e-01   | 9.2e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   
+            2          | 1.4e-04   | 3.0e-04   | 1.6e-03   | 2.9e-03   | 2.0e-01   | 6.2e-08   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   
+            3          | 4.4e-11   | 3.2e-10   | 3.9e-09   | 7.5e-09   | 4.5e-05   | 1.6e-08   | 2.5e-07   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   
+            4          | 5.1e-24   | 6.4e-22   | 1.6e-20   | 9.6e-20   | 3.1e-12   | 7.6e-09   | 6.2e-08   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   
+            5          | 1.0e-30   | 1.6e-30   | 3.8e-30   | 1.3e-29   | 1.6e-26   | 3.4e-09   | 1.6e-08   | 2.5e-07   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.0e+00   | 1.5e+00   
         >>> print_data_signatures_lm_opt(data)
             data['iterrange'].shape = (6,)
             data['times'].shape = (6,)
@@ -270,6 +273,7 @@ def lm_opt(
     assert verbose>=0 
     assert verbose_indent%1==0 
     assert verbose_indent>=0
+    assert isinstance(verbose_times,bool)
     thetas = torch.nan*torch.ones((iters+1,*batch_shape,*nonbatch_theta_shape),device=default_device)
     times = torch.nan*torch.ones(iters+1,device=default_device)
     losses = torch.nan*torch.ones((iters+1,*batch_shape),device=default_device)
@@ -280,7 +284,7 @@ def lm_opt(
     alphas_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_alphas}
     if verbose:
         _h_iter = "%-10s "%"iter i"
-        _h_times = "| %-10s"%"times"
+        _h_times = "| %-10s"%"times" if verbose_times else ""
         _s_losses_qt = ("| %-9s "*len(verbose_quantiles_losses))%tuple(str(qt) for qt in verbose_quantiles_losses)
         _s_lams_qt = ("| %-9s "*len(verbose_quantiles_lams))%tuple(str(qt) for qt in verbose_quantiles_lams)
         _s_alphas_qt = ("| %-9s "*len(verbose_quantiles_alphas))%tuple(str(qt) for qt in verbose_quantiles_alphas)
@@ -351,7 +355,7 @@ def lm_opt(
             _s_losses_qt = ("| %-9.1e "*len(verbose_quantiles_losses))%tuple(losses_quantiles[str(qt)][i] for qt in verbose_quantiles_losses)
             _s_lams_qt = ("| %-9.1e "*len(verbose_quantiles_lams))%tuple(lams_quantiles[str(qt)][i] for qt in verbose_quantiles_lams)
             _s_alphas_qt = ("| %-9.1e "*len(verbose_quantiles_alphas))%tuple(alphas_quantiles[str(qt)][i] for qt in verbose_quantiles_alphas)
-            _s_times = "| %-10.1f "%(times[i])
+            _s_times = "| %-10.1f "%(times[i]) if verbose_times else ""
             print(" "*verbose_indent+_s_iter+_s_losses_qt+_s_lams_qt+_s_alphas_qt+_s_times)
         if i==iters: break
         J = Jfull.reshape((R,K,T))
