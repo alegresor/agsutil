@@ -1,3 +1,2 @@
-# `torchags`: PyTorch Automated Gradient Solvers
+# `agsutil`: Algorithms, Gradients, and Subplot Utils for `torch` and `matplotlib`
 
-Various algorithm utilities in PyTorch.

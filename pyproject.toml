@@ -1,0 +1,58 @@
+# https://packaging.python.org/en/latest/guides/writing-pyproject-toml/
+# brew install pdm
+# https://pdm-project.org/latest/usage/publish/
+# pdm publish --repository testpypi
+# pdm publish 
+
+[build-system]
+requires = ["pdm-backend >= 2.4.0"]
+build-backend = "pdm.backend"
+
+# [project.urls]
+# Documentation = "https://alegresor.github.io/fastgps/"
+# Repository = "https://github.com/alegresor/fastgps"
+# Issues = "https://github.com/alegresor/fastgps/issues"
+
+[project]
+name = "agsutil"
+description = "Algorithms, Gradients, and Subplot Utils for `torch` and `matplotlib`"
+authors = [
+    {name="Aleksei G. Sorokin", email="agsorokin3@gmail.com"},
+]
+readme = "README.md"
+keywords = [
+        "algorithms",
+        "Levenberg",
+        "Marquardt",
+        "torch",
+        "matplotlib",
+    ]
+license = "GPL-3.0"
+dynamic = ["version"]
+requires-python = ">= 3.7"
+dependencies = [
+    "numpy >= 1.17.0",
+    "torch >= 2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest >= 8.3.5",
+    "jupyterlab >= 4.0.0",
+    "matplotlib >= 3.9.0",
+#     "seaborn >= 0.13.2",
+#     "tueplots >= 0.2.0",
+#     "pandas >= 2.0.0",
+    "mkdocs >= 1.5.0",
+    "mkdocs-material >= 9.6.12",
+    "mkdocs-jupyter >= 0.25.0",
+    "mkdocstrings-python >= 1.16.0",
+]
+superdev = [
+    "fastgps[dev]",
+    "pytest-accept >= 0.1.12",
+]
+
+[tool.pdm.version]
+source = "file"
+path = "agsutil/__init__.py"
