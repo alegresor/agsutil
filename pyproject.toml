@@ -8,10 +8,10 @@
 requires = ["pdm-backend >= 2.4.0"]
 build-backend = "pdm.backend"
 
-# [project.urls]
-# Documentation = "https://alegresor.github.io/fastgps/"
-# Repository = "https://github.com/alegresor/fastgps"
-# Issues = "https://github.com/alegresor/fastgps/issues"
+[project.urls]
+Documentation = "https://alegresor.github.io/agsutil/"
+Repository = "https://github.com/alegresor/agsutil"
+Issues = "https://github.com/alegresor/agsutil/issues"
 
 [project]
 name = "agsutil"
@@ -49,7 +49,7 @@ dev = [
     "mkdocstrings-python >= 1.16.0",
 ]
 superdev = [
-    "fastgps[dev]",
+    "agsutil[dev]",
     "pytest-accept >= 0.1.12",
 ]
 

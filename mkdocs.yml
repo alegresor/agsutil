@@ -1,4 +1,4 @@
-site_name: "fastgps"
+site_name: "agsutil"
 nav:
   - Home: index.md
   - Package Reference: api.md
@@ -31,7 +31,7 @@ plugins:
       default_handler: python
       handlers:
         python:
-          paths: [fastgps]  # search packages in the src folder
+          paths: [agsutil]  # search packages in the src folder
           options:
             members_order: source
             show_root_toc_entry: false
