@@ -51,6 +51,7 @@ def print_data_signatures_lm_opt(data, show_device=False):
 def lm_opt(
         f,
         theta0,
+        ytrue,
         iters = 10,
         batch_dims = 0, 
         f_kwargs_vec = {},
@@ -78,6 +79,7 @@ def lm_opt(
     Args:
         f (func): Residual function. 
         theta0 (torch.Tensor): Initial guess for parameters $\theta$. 
+        ytrue (torch.Tensor): True `y` values, i.e. `f(theta_true)`. 
         iters (int): Number of iterations. 
         batch_dims (int): Number of batch dimension. 
         f_kwargs_vec (dict): Keyword arguments to `f` which will be vectorized over the first dimension. 
@@ -124,25 +126,25 @@ def lm_opt(
         >>> rng = torch.Generator().manual_seed(7)
         >>> x = torch.rand((10,4,),generator=rng)
         >>> theta_true = torch.rand((4,),generator=rng)
-        >>> y_true = torch.exp((x*theta_true).sum(-1)) # (10,)
-        >>> def f(theta,y_true):
-        ...     y_hat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
-        ...     return (y_hat-y_true),y_true
+        >>> ytrue = torch.exp((x*theta_true).sum(-1)) # (10,)
+        >>> def f(theta):
+        ...     yhat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
+        ...     return yhat
         >>> theta_hat,data = lm_opt(
         ...     f = f, 
         ...     theta0 = torch.rand_like(theta_true,generator=rng),
+        ...     ytrue = ytrue,
         ...     iters = 3,
         ...     batch_dims = 0,
-        ...     f_kwargs_vec = {"y_true":y_true},
-        ...     f_kwargs_no_vec = {},
+        ...     verbose_times = False,
         ...     )
-            iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          | times     
-                       | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90                    
-            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            0          | 2.3e+01   | 2.3e+01   | 2.3e+01   | 2.3e+01   | 2.3e+01   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 0.4        
-            1          | 7.3e+00   | 7.3e+00   | 7.3e+00   | 7.3e+00   | 7.3e+00   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 0.4        
-            2          | 8.5e-02   | 8.5e-02   | 8.5e-02   | 8.5e-02   | 8.5e-02   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 0.4        
-            3          | 3.3e-05   | 3.3e-05   | 3.3e-05   | 3.3e-05   | 3.3e-05   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 0.4        
+            iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 2.3e+01   | 2.3e+01   | 2.3e+01   | 2.3e+01   | 2.3e+01   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 7.3e+00   | 7.3e+00   | 7.3e+00   | 7.3e+00   | 7.3e+00   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            2          | 8.5e-02   | 8.5e-02   | 8.5e-02   | 8.5e-02   | 8.5e-02   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 2.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            3          | 3.3e-05   | 3.3e-05   | 3.3e-05   | 3.3e-05   | 3.3e-05   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
         >>> torch.allclose(theta_hat,theta_true,atol=5e-2)
         True
         >>> print_data_signatures_lm_opt(data)
@@ -200,17 +202,16 @@ def lm_opt(
         >>> rng = torch.Generator().manual_seed(7)
         >>> x = torch.rand((3,3,3,2,2),generator=rng)
         >>> theta_true = torch.rand((4,4,2,2),generator=rng)
-        >>> y_true = torch.exp((x*theta_true[...,None,None,None,:,:]).sum((-2,-1))) # (4,4,3,3,3)
-        >>> def f(theta,y_true):
-        ...     y_hat = torch.exp((x*theta[...,None,None,None,:,:]).sum((-2,-1))) # (...,3,3,3)
-        ...     return (y_hat-y_true),y_true
+        >>> ytrue = torch.exp((x*theta_true[...,None,None,None,:,:]).sum((-2,-1))) # (4,4,3,3,3)
+        >>> def f(theta):
+        ...     yhat = torch.exp((x*theta[...,None,None,None,:,:]).sum((-2,-1))) # (...,3,3,3)
+        ...     return yhat
         >>> theta_hat,data = lm_opt(
         ...     f = f, 
         ...     theta0 = torch.rand_like(theta_true,generator=rng),
+        ...     ytrue = ytrue,
         ...     iters = 2,
         ...     batch_dims = 2,
-        ...     f_kwargs_vec = {"y_true":y_true},
-        ...     f_kwargs_no_vec = {},
         ...     lam_factors = [torch.tensor([1/4,1/2,1,2,4])],
         ...     alpha_factors = [torch.tensor([2/3,1,3/2])],
         ...     verbose_times = False,
@@ -295,6 +296,10 @@ def lm_opt(
         theta = theta0[None,...]
     else: # batch_dims>0:
         theta = theta0.flatten(end_dim=batch_dims-1)
+    if batch_dims==0:
+        ytrue = ytrue[None,...]
+    else: # batch_dims>0:
+        ytrue = ytrue.flatten(end_dim=batch_dims-1)
     assert isinstance(f_kwargs_vec,dict)
     assert isinstance(f_kwargs_no_vec,dict)
     f_kwargs_vec_names = list(f_kwargs_vec.keys())
@@ -305,6 +310,8 @@ def lm_opt(
             f_kwargs_vec_vals.append(f_kwargs_vec[key][None,...])
         else: # batch_dims>0
             f_kwargs_vec_vals.append(f_kwargs_vec[key].flatten(end_dim=batch_dims-1))
+    f_kwargs_vec_names = ["ytrue"]+f_kwargs_vec_names
+    f_kwargs_vec_vals = [ytrue]+f_kwargs_vec_vals
     if verbose is None: 
         verbose = max(1,iters//20)
     assert lam0>0
@@ -369,16 +376,18 @@ def lm_opt(
         print(" "*verbose_indent+_h)
         print(" "*verbose_indent+_s)
         print(" "*verbose_indent+"~"*len(_s))
-    def ftilde(theta, *f_kwargs_vec_vals):
+    def f_resid(theta, *f_kwargs_vec_vals):
         assert len(f_kwargs_vec_vals)==len(f_kwargs_vec_names)
-        f_kwargs_vec = {f_kwargs_vec_names[i]:f_kwargs_vec_vals[i] for i in range(len(f_kwargs_vec_names))}
-        y,*others = f(theta,**f_kwargs_vec,**f_kwargs_no_vec)
-        return y,(y,*others)
+        ytrue = f_kwargs_vec_vals[0]
+        f_kwargs_vec = {f_kwargs_vec_names[i]:f_kwargs_vec_vals[i] for i in range(1,len(f_kwargs_vec_names))}
+        yhat = f(theta,**f_kwargs_vec,**f_kwargs_no_vec)
+        resid = yhat-ytrue
+        return resid,(resid,yhat)
     assert isinstance(jacfwd,bool)
     if jacfwd:
-        jac_ftilde = torch.func.jacfwd(ftilde,argnums=(0,),has_aux=True)
+        jac_ftilde = torch.func.jacfwd(f_resid,argnums=(0,),has_aux=True)
     else:
-        jac_ftilde = torch.func.jacrev(ftilde,argnums=(0,),has_aux=True)
+        jac_ftilde = torch.func.jacrev(f_resid,argnums=(0,),has_aux=True)
     vjac_ftilde = torch.func.vmap(jac_ftilde,in_dims=(0,)+(0,)*len(f_kwargs_vec_names),chunk_size=vmap_chunk_size)
     eyeT = torch.eye(T,device=device)
     Rrange = torch.arange(R,device=device)
@@ -388,9 +397,9 @@ def lm_opt(
     timer.tic()
     for i in range(iters+1):
         if i==iters:
-            _,(resid,*others) = ftilde(theta,*f_kwargs_vec_vals)
+            _,(resid,yhat) = f_resid(theta,*f_kwargs_vec_vals)
         else:
-            (Jfull,),(resid,*others) = vjac_ftilde(theta,*f_kwargs_vec_vals)
+            (Jfull,),(resid,yhat) = vjac_ftilde(theta,*f_kwargs_vec_vals)
         nonbatch_resid_dims = resid.ndim-1
         nonbatch_resid_shape = tuple(resid.shape[1:])
         K = int(torch.tensor(nonbatch_resid_shape).prod())
@@ -453,7 +462,7 @@ def lm_opt(
         thetas_new = thetasf_new.reshape((Q_alphas,Q_lams,R,*nonbatch_theta_shape))
         f_kwargs_vec_vals_success = [(torch.ones((Q_alphas,Q_lams)+(1,)*f_kwargs_vec_vals[l].ndim,device=device)*f_kwargs_vec_vals[l][None,None,...])[:,success] for l in range(len(f_kwargs_vec_vals))]
         residf_new = torch.inf*torch.ones((Q_alphas,Q_lams,R,K),device=device)
-        _,(resid_new_success,*others_new_success) = ftilde(thetas_new[:,success],*f_kwargs_vec_vals_success)
+        _,(resid_new_success,_) = f_resid(thetas_new[:,success],*f_kwargs_vec_vals_success)
         residf_new[:,success] = resid_new_success.reshape((Q_alphas,resid_new_success.size(1),K))
         losses_new = (residf_new**2).sum(-1)
         imin = losses_new.reshape((Q_alphas*Q_lams,R)).argmin(0) # (R,)
@@ -488,16 +497,14 @@ if __name__=="__main__":
     rng = torch.Generator(device=device).manual_seed(7)
     x = torch.rand((10,4,),generator=rng,device=device)
     theta_true = torch.rand((4,),generator=rng,device=device)
-    y_true = torch.exp((x*theta_true).sum(-1)) # (10,)
-    def f(theta,y_true):
-        y_hat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
-        return (y_hat-y_true),y_true
+    ytrue = torch.exp((x*theta_true).sum(-1)) # (10,)
+    def f(theta):
+        yhat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
+        return yhat
     theta,data = lm_opt(
         f = f, 
         theta0 = torch.rand_like(theta_true,generator=rng),
+        ytrue = ytrue,
         iters = 3,
-        batch_dims = 0,
-        f_kwargs_vec = {"y_true":y_true},
-        f_kwargs_no_vec = {},
         )
     print_data_signatures_lm_opt(data,show_device=True)
