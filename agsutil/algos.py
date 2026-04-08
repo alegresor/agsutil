@@ -275,11 +275,13 @@ def lm_opt(
                 data['alphas_quantiles']['99'].shape = (3,)
                 data['alphas_quantiles']['100'].shape = (3,)
     """
-    if warn and (not torch.get_default_dtype()==torch.float64):
-        warnings.warn('''
+    if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
-                torch.set_default_dtype(torch.float64)
-            '''%str(torch.get_default_dtype()))
+                torch.set_default_dtype(torch.float64)'''%str(torch.get_default_dtype()))
+    device = str(theta0.device)
+    default_device = str(torch.get_default_device())
+    assert iters%1==0, "iters should be an int"
+    assert iters>=0
     assert callable(f) 
     assert batch_dims>=0
     assert isinstance(theta0,torch.Tensor)
@@ -287,11 +289,10 @@ def lm_opt(
     R = int(torch.tensor(batch_shape).prod())
     nonbatch_theta_dims = theta0.ndim-batch_dims
     nonbatch_theta_shape = tuple(theta0.shape[batch_dims:])
+    nonbatch_y_dims = ytrue.ndim-batch_dims
+    nonbatch_y_shape = tuple(ytrue.shape[batch_dims:])
+    K = int(torch.tensor(nonbatch_y_shape).prod())
     T = int(torch.tensor(nonbatch_theta_shape).prod())
-    device = str(theta0.device)
-    default_device = str(torch.get_default_device())
-    assert iters%1==0, "iters should be an int"
-    assert iters>=0
     if batch_dims==0:
         theta = theta0[None,...]
     else: # batch_dims>0:
@@ -362,6 +363,35 @@ def lm_opt(
     losses_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_losses}
     lams_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_lams}
     alphas_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_alphas}
+    def f_resid(theta, *f_kwargs_vec_vals):
+        assert len(f_kwargs_vec_vals)==len(f_kwargs_vec_names)
+        ytrue = f_kwargs_vec_vals[0]
+        f_kwargs_vec = {f_kwargs_vec_names[i]:f_kwargs_vec_vals[i] for i in range(1,len(f_kwargs_vec_names))}
+        yhat = f(theta,**f_kwargs_vec,**f_kwargs_no_vec)
+        resid = yhat-ytrue
+        return resid,(resid,yhat)
+    assert isinstance(jacfwd,bool)
+    if jacfwd:
+        jac_ftilde = torch.func.jacfwd(f_resid,argnums=(0,),has_aux=True)
+    else:
+        jac_ftilde = torch.func.jacrev(f_resid,argnums=(0,),has_aux=True)
+    vjac_ftilde = torch.func.vmap(jac_ftilde,in_dims=(0,)+(0,)*len(f_kwargs_vec_names),chunk_size=vmap_chunk_size)
+    if warn and jacfwd and T>K: warnings.warn('''
+        For T the number of inputs and K the number of outputs:
+            torch.func.jacfwd performs best when T << K. 
+            torch.func.jacrev performs best when K << T.
+        You are using torch.func.jacfwd but T = %d > %d = K. 
+        Try using torch.func.jacrev by setting jacfwd = False.'''%(T,K))
+    if warn and (not jacfwd) and T<K: warnings.warn('''
+        For T the number of inputs and K the number of outputs:
+            torch.func.jacfwd performs best when T << K. 
+            torch.func.jacrev performs best when K << T.
+        You are using torch.func.jacrev but T = %d < %d = K. 
+        Try using torch.func.jacrev by setting jacfwd = True.'''%(T,K))
+    eyeT = torch.eye(T,device=device)
+    Rrange = torch.arange(R,device=device)
+    lam = lam0*torch.ones(R,device=device)
+    alpha = alpha0*torch.ones(R,device=device)
     if verbose:
         _h_iter = "%-10s "%"iter i"
         _h_times = "| %-10s"%"times" if verbose_times else ""
@@ -376,23 +406,6 @@ def lm_opt(
         print(" "*verbose_indent+_h)
         print(" "*verbose_indent+_s)
         print(" "*verbose_indent+"~"*len(_s))
-    def f_resid(theta, *f_kwargs_vec_vals):
-        assert len(f_kwargs_vec_vals)==len(f_kwargs_vec_names)
-        ytrue = f_kwargs_vec_vals[0]
-        f_kwargs_vec = {f_kwargs_vec_names[i]:f_kwargs_vec_vals[i] for i in range(1,len(f_kwargs_vec_names))}
-        yhat = f(theta,**f_kwargs_vec,**f_kwargs_no_vec)
-        resid = yhat-ytrue
-        return resid,(resid,yhat)
-    assert isinstance(jacfwd,bool)
-    if jacfwd:
-        jac_ftilde = torch.func.jacfwd(f_resid,argnums=(0,),has_aux=True)
-    else:
-        jac_ftilde = torch.func.jacrev(f_resid,argnums=(0,),has_aux=True)
-    vjac_ftilde = torch.func.vmap(jac_ftilde,in_dims=(0,)+(0,)*len(f_kwargs_vec_names),chunk_size=vmap_chunk_size)
-    eyeT = torch.eye(T,device=device)
-    Rrange = torch.arange(R,device=device)
-    lam = lam0*torch.ones(R,device=device)
-    alpha = alpha0*torch.ones(R,device=device)
     timer = Timer(device=device)
     timer.tic()
     for i in range(iters+1):
@@ -400,27 +413,7 @@ def lm_opt(
             _,(resid,yhat) = f_resid(theta,*f_kwargs_vec_vals)
         else:
             (Jfull,),(resid,yhat) = vjac_ftilde(theta,*f_kwargs_vec_vals)
-        nonbatch_resid_dims = resid.ndim-1
-        nonbatch_resid_shape = tuple(resid.shape[1:])
-        K = int(torch.tensor(nonbatch_resid_shape).prod())
-        if i==0 and warn:
-            if jacfwd and T>K:
-                warnings.warn('''
-                For T the number of inputs and K the number of outputs:
-                    torch.func.jacfwd performs best when T << K. 
-                    torch.func.jacrev performs best when K << T.
-                You are using torch.func.jacfwd but T = %d > %d = K. 
-                Try using torch.func.jacrev by setting jacfwd = False.
-                '''%(T,K))
-            if (not jacfwd) and T<K:
-                warnings.warn('''
-                For T the number of inputs and K the number of outputs:
-                    torch.func.jacfwd performs best when T << K. 
-                    torch.func.jacrev performs best when K << T.
-                You are using torch.func.jacrev but T = %d < %d = K. 
-                Try using torch.func.jacrev by setting jacfwd = True.
-                '''%(T,K))
-        assert Jfull.shape==(R,*nonbatch_resid_shape,*nonbatch_theta_shape)
+        assert Jfull.shape==(R,*nonbatch_y_shape,*nonbatch_theta_shape)
         loss = (resid**2).flatten(start_dim=1).sum(-1)
         losses[i] = loss.reshape(batch_shape).to(default_device)
         lams[i] = lam.reshape(batch_shape).to(default_device)
@@ -506,5 +499,6 @@ if __name__=="__main__":
         theta0 = torch.rand_like(theta_true,generator=rng),
         ytrue = ytrue,
         iters = 3,
+        jacfwd=False
         )
     print_data_signatures_lm_opt(data,show_device=True)
