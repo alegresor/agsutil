@@ -484,21 +484,40 @@ def lm_opt(
     return theta,data
 
 if __name__=="__main__":
-    device = "mps"
+    device = "cpu"
     if "mps" not in device:
         torch.set_default_dtype(torch.float64)
     rng = torch.Generator(device=device).manual_seed(7)
-    x = torch.rand((10,4,),generator=rng,device=device)
-    theta_true = torch.rand((4,),generator=rng,device=device)
-    ytrue = torch.exp((x*theta_true).sum(-1)) # (10,)
+
+    # x = torch.rand((10,4,),generator=rng,device=device)
+    # theta_true = torch.rand((4,),generator=rng,device=device)
+    # ytrue = torch.exp((x*theta_true).sum(-1)) # (10,)
+    # def f(theta):
+    #     yhat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
+    #     return yhat
+    # theta,data = lm_opt(
+    #     f = f, 
+    #     theta0 = torch.rand_like(theta_true,generator=rng),
+    #     ytrue = ytrue,
+    #     iters = 3,
+    #     # jacfwd=False,
+    #     )
+    # print_data_signatures_lm_opt(data,show_device=True)
+
+    x = torch.rand((3,3,3,2,2),generator=rng,device=device)
+    theta_true = torch.rand((4,4,2,2),generator=rng,device=device)
+    ytrue = torch.exp((x*theta_true[...,None,None,None,:,:]).sum((-2,-1))) # (4,4,3,3,3)
     def f(theta):
-        yhat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
+        yhat = torch.exp((x*theta[...,None,None,None,:,:]).sum((-2,-1))) # (...,3,3,3)
         return yhat
-    theta,data = lm_opt(
+    theta_hat,data = lm_opt(
         f = f, 
         theta0 = torch.rand_like(theta_true,generator=rng),
         ytrue = ytrue,
-        iters = 3,
-        jacfwd=False
+        iters = 20,
+        batch_dims = 2,
+        lam_factors = [torch.tensor([1/4,1/2,1,2,4])],
+        alpha_factors = [torch.tensor([2/3,1,3/2])],
+        verbose_times = False,
         )
-    print_data_signatures_lm_opt(data,show_device=True)
+    print_data_signatures_lm_opt(data)
