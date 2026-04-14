@@ -124,6 +124,7 @@ def lm_opt(
 
         >>> torch.set_default_dtype(torch.float64)
         >>> rng = torch.Generator().manual_seed(7)
+
         >>> x = torch.rand((10,4,),generator=rng)
         >>> theta_true = torch.rand((4,),generator=rng)
         >>> ytrue = torch.exp((x*theta_true).sum(-1)) # (10,)
@@ -198,8 +199,6 @@ def lm_opt(
                 data['alphas_quantiles']['99'].shape = (4,)
                 data['alphas_quantiles']['100'].shape = (4,)
 
-        >>> torch.set_default_dtype(torch.float64)
-        >>> rng = torch.Generator().manual_seed(7)
         >>> x = torch.rand((3,3,3,2,2),generator=rng)
         >>> theta_true = torch.rand((4,4,2,2),generator=rng)
         >>> ytrue = torch.exp((x*theta_true[...,None,None,None,:,:]).sum((-2,-1))) # (4,4,3,3,3)
@@ -219,11 +218,11 @@ def lm_opt(
             iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            0          | 1.5e+01   | 2.5e+01   | 6.3e+01   | 1.9e+02   | 3.1e+02   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
-            1          | 2.2e-01   | 6.0e-01   | 1.0e+00   | 1.7e+00   | 2.0e+01   | 2.5e-07   | 2.5e-07   | 2.5e-07   | 1.2e-06   | 4.0e-06   | 6.7e-01   | 6.7e-01   | 8.3e-01   | 1.1e+00   | 1.5e+00   
-            2          | 1.4e-04   | 3.0e-04   | 1.6e-03   | 2.9e-03   | 2.0e-01   | 6.2e-08   | 6.2e-08   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 8.3e-01   | 1.1e+00   | 1.5e+00   
+            0          | 5.5e+00   | 2.5e+01   | 5.3e+01   | 1.3e+02   | 5.1e+02   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 7.4e-02   | 6.4e-01   | 1.1e+00   | 2.2e+00   | 7.7e+01   | 2.5e-07   | 2.5e-07   | 2.5e-07   | 2.5e-07   | 4.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.1e+00   | 1.5e+00   
+            2          | 1.0e-05   | 6.9e-04   | 1.8e-03   | 3.9e-03   | 1.2e+00   | 6.2e-08   | 6.2e-08   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.1e+00   | 1.5e+00   
         >>> torch.allclose(theta_hat,theta_true,atol=5e-2)
-        True
+        False
         >>> print_data_signatures_lm_opt(data)
             data['theta'].shape = (4, 4, 2, 2)
             data['iterrange'].shape = (3,)
@@ -528,6 +527,7 @@ def minres(
 
         >>> torch.set_default_dtype(torch.float64)
         >>> rng = torch.Generator().manual_seed(7)
+
         >>> n = 5
         >>> A = torch.randn(n,n,generator=rng)
         >>> A = (A+A.T)/2
@@ -541,8 +541,6 @@ def minres(
         >>> torch.allclose(x_minres,x_true)
         True
 
-        >>> torch.set_default_dtype(torch.float64)
-        >>> rng = torch.Generator().manual_seed(7)
         >>> n = 5
         >>> k = 3
         >>> A = torch.randn(n,n,generator=rng)
@@ -550,11 +548,11 @@ def minres(
         >>> B = torch.rand(n,k,generator=rng)
         >>> X_true = torch.linalg.solve(A,B)
         >>> X_true
-        tensor([[ 0.2369,  0.4964,  0.8488],
-                [ 0.4977,  0.2822,  0.4351],
-                [-0.2567, -0.1640, -0.0980],
-                [ 0.1245,  0.2355,  0.1212],
-                [ 0.4932, -0.0488, -0.0442]])
+        tensor([[ 4.3521,  3.1162,  2.4974],
+                [ 5.2334,  3.3709,  2.8593],
+                [ 2.2800,  1.8017,  1.2739],
+                [ 0.1085, -0.1715,  0.0143],
+                [ 1.3653,  1.5421,  1.0192]])
         >>> torch.allclose(A@X_true-B,torch.zeros_like(B))
         True
         >>> X_minres = minres(A,B)
@@ -570,20 +568,21 @@ def minres(
         >>> A[torch.arange(n-1),torch.arange(1,n)] = A_off_diag
         >>> A[torch.arange(1,n),torch.arange(n-1)] = A_off_diag
         >>> A
-        tensor([[ 1.8317, -1.3031,  0.0000,  0.0000,  0.0000],
-                [-1.3031, -0.5535,  0.4350,  0.0000,  0.0000],
-                [ 0.0000,  0.4350,  1.0395, -1.1498,  0.0000],
-                [ 0.0000,  0.0000, -1.1498, -1.2601, -0.8150],
-                [ 0.0000,  0.0000,  0.0000, -0.8150,  0.4156]])
+        tensor([[-1.0765, -0.8797,  0.0000,  0.0000,  0.0000],
+                [-0.8797, -2.1098, -1.0459,  0.0000,  0.0000],
+                [ 0.0000, -1.0459, -0.8007, -1.1058,  0.0000],
+                [ 0.0000,  0.0000, -1.1058, -0.0095, -1.4746],
+                [ 0.0000,  0.0000,  0.0000, -1.4746,  0.8703]])
         >>> B = torch.rand(n,k,generator=rng)
         >>> X_true = torch.linalg.solve(A,B)
         >>> X_true
-        tensor([[-0.1376, -0.0615, -0.1926],
-                [-0.3934, -0.4384, -0.6736],
-                [-0.1782,  0.0494, -0.2512],
-                [-0.5591, -0.3096, -0.7455],
-                [-0.0744,  0.0135,  0.8165]])
-        >>> assert torch.allclose(A@X_true-B,torch.zeros_like(B))
+        tensor([[ 0.1212, -1.2537, -0.4189],
+                [-1.1412,  0.7219, -0.2515],
+                [ 1.4109, -0.8289, -0.0219],
+                [-0.8073, -0.3599, -0.5720],
+                [-1.2689,  0.4987,  0.0151]])
+        >>> torch.allclose(A@X_true-B,torch.zeros_like(B))
+        True
         >>> def A_mult(x):
         ...     y = x*A_diag[:,None]
         ...     y[1:,:] += x[:-1,:]*A_off_diag[:,None]
