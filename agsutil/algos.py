@@ -497,7 +497,8 @@ def minres(
         verbose_quantiles_losses = [5,25,50,75,90],
         verbose_times = True, 
         warn = True,
-        return_data = False,
+        store_data_iters = False, 
+        store_all_data = False,
         ):
     r"""
     [MINRES algorithm](https://en.wikipedia.org/wiki/Minimal_residual_method) for solving symmetric linear systems 
@@ -515,7 +516,7 @@ def minres(
         verbose (int): Controls logging verbosity
 
             - If True, perform logging. 
-            - If a positive int, only log every verbose iterations. 
+            - If a positive int, only log every `verbose` iterations. 
             - If None, set to a reasonable positive int based on the maximum number of iterations
             - If False, don't log. 
         
@@ -524,11 +525,18 @@ def minres(
         verbose_quantiles_losses (list): Loss quantiles to show in verbose log.
         verbose_times (bool): If `False`, do not show the times in the verbose log. This is mostly for testing where timing is not reproducible. 
         warn (bool): If `False`, then suppress warnings.
-        return_data (bool): If `True`, return `(x,data)`, otherwise only return `x`
-    
+        store_data_iters (int): Controls storage iterations with the same options as verbose. If `store_data_iters==0`, then the data is not collected or returned. 
+
+            - If True, store every iteration. 
+            - If a positive int, only store every `store_data_iters` iterations. 
+            - If None, set to a reasonable positive int based on the maximum number of iterations
+            - If False, don't store data, and do not return data 
+
+        store_all_data (bool): If `True`, store the `x` values as well as the metrics. 
+
     Returns:
         x (torch.Tensor): Optimized $X$.
-        data (dict): Iteration data, only returned when `return_data=True`
+        data (dict): Iteration data, only returned when `store_data_iters>0`
 
     Examples:
 
@@ -621,7 +629,7 @@ def minres(
         ...     return y
         >>> torch.allclose(A_mult(X_true),A@X_true)
         True
-        >>> X_minres,data = minres(A_mult,B,verbose=None,verbose_times=False,return_data=True)
+        >>> X_minres,data = minres(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None)
             iter i     | losses_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -656,7 +664,7 @@ def minres(
         ...     return y
         >>> torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
         True
-        >>> X_minres = minres(A_mult,B,verbose=None,verbose_times=False)
+        >>> X_minres,data = minres(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None,store_all_data=True)
             iter i     | losses_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -673,25 +681,25 @@ def minres(
         >>> torch.allclose(X_minres,X_true)
         True
         >>> print_data_signatures(data)
-            data['x'].shape = (5, 3)
-            data['iterrange'].shape = (26,)
-            data['times'].shape = (26,)
-            data['xs'].shape = (26, 5, 3)
-            data['losses'].shape = (26, 3)
+            data['x'].shape = (2, 6, 4, 100, 3)
+            data['iterrange'].shape = (152,)
+            data['times'].shape = (152,)
+            data['losses'].shape = (152, 2, 6, 4, 3)
             data['losses_quantiles']
-                data['losses_quantiles']['0'].shape = (26,)
-                data['losses_quantiles']['1'].shape = (26,)
-                data['losses_quantiles']['5'].shape = (26,)
-                data['losses_quantiles']['10'].shape = (26,)
-                data['losses_quantiles']['25'].shape = (26,)
-                data['losses_quantiles']['40'].shape = (26,)
-                data['losses_quantiles']['50'].shape = (26,)
-                data['losses_quantiles']['60'].shape = (26,)
-                data['losses_quantiles']['75'].shape = (26,)
-                data['losses_quantiles']['90'].shape = (26,)
-                data['losses_quantiles']['95'].shape = (26,)
-                data['losses_quantiles']['99'].shape = (26,)
-                data['losses_quantiles']['100'].shape = (26,)
+                data['losses_quantiles']['0'].shape = (152,)
+                data['losses_quantiles']['1'].shape = (152,)
+                data['losses_quantiles']['5'].shape = (152,)
+                data['losses_quantiles']['10'].shape = (152,)
+                data['losses_quantiles']['25'].shape = (152,)
+                data['losses_quantiles']['40'].shape = (152,)
+                data['losses_quantiles']['50'].shape = (152,)
+                data['losses_quantiles']['60'].shape = (152,)
+                data['losses_quantiles']['75'].shape = (152,)
+                data['losses_quantiles']['90'].shape = (152,)
+                data['losses_quantiles']['95'].shape = (152,)
+                data['losses_quantiles']['99'].shape = (152,)
+                data['losses_quantiles']['100'].shape = (152,)
+            data['xs'].shape = (152, 2, 6, 4, 100, 3)
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
@@ -713,17 +721,21 @@ def minres(
     if iters is None: 
         iters = 5*n 
     assert X0.shape==B.shape 
-    assert isinstance(return_data,bool)
     assert iters>=0
     assert iters%1==0
     if verbose is None: 
         verbose = max(1,iters//20)
+    assert verbose%1==0
+    assert verbose>=0 
+    if store_data_iters is None: 
+        store_data_iters = max(1,iters//1000)
+    assert store_data_iters%1==0
+    assert store_data_iters>=0 
+    assert isinstance(store_all_data,bool)
     assert isinstance(quantiles_losses,list)
     assert all(0<=qt<=100 for qt in quantiles_losses)
     assert isinstance(verbose_quantiles_losses,list)
     assert all(qt in quantiles_losses for qt in verbose_quantiles_losses)
-    assert verbose%1==0
-    assert verbose>=0 
     assert verbose_indent%1==0 
     assert verbose_indent>=0
     assert isinstance(verbose_times,bool)
@@ -750,10 +762,13 @@ def minres(
     Ax = matvec(x)
     assert Ax.shape[-2:]==(n,k)
     batch_shape = tuple(Ax.shape[:-2])
-    xs = torch.nan*torch.ones((iters+1,*batch_shape,n,k),device=default_device)
-    times = torch.nan*torch.ones(iters+1,device=default_device)
-    losses = torch.nan*torch.ones((iters+1,*batch_shape,k),device=default_device)
-    losses_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_losses}
+    if store_data_iters:
+        iterrange = []
+        times = []
+        losses = []
+        losses_quantiles = {str(qt):[] for qt in quantiles_losses}
+        if store_all_data:
+            xs = []
     r1 = B-Ax # (...,n,k)
     y = psolve(r1) # (...,n,k)
     beta1 = inner(r1,y) # (...,k)
@@ -781,18 +796,23 @@ def minres(
     rtol = 1e-5 # TODO: 
     residtol = 1e-8 # TODO: 
     for i in range(iters+1):
-        xs[i] = x.to(default_device)
         r = matvec(x)-B 
-        loss = torch.linalg.norm(r,dim=-2)/bnorm
-        losses[i] = loss.to(default_device)
-        for qt in quantiles_losses:
-            losses_quantiles[str(qt)][i] = loss.nanquantile(qt/100).to(default_device)
-        times[i] = timer.toc()
         breakcond = i==iters or r.abs().amax()<=residtol
+        loss = torch.linalg.norm(r,dim=-2)/bnorm
+        times_i = timer.toc()
+        losses_quantiles_i = {str(qt): loss.nanquantile(qt/100) for qt in quantiles_losses}
+        if store_data_iters and (i%store_data_iters==0 or breakcond):
+            iterrange.append(i)
+            losses.append(loss.to(default_device))
+            times.append(times_i)
+            for qt in quantiles_losses:
+                losses_quantiles[str(qt)].append(losses_quantiles_i[str(qt)].to(default_device))
+            if store_all_data:
+                xs.append(x.expand(r.shape).to(default_device))
         if verbose and (i%verbose==0 or breakcond):
             _s_iter = "%-10d "%i
-            _s_losses_qt = ("| %-9.1e "*len(verbose_quantiles_losses))%tuple(losses_quantiles[str(qt)][i] for qt in verbose_quantiles_losses)
-            _s_times = "| %-10.1f "%(times[i]) if verbose_times else ""
+            _s_losses_qt = ("| %-9.1e "*len(verbose_quantiles_losses))%tuple(losses_quantiles_i[str(qt)] for qt in verbose_quantiles_losses)
+            _s_times = "| %-10.1f "%(times_i) if verbose_times else ""
             print(" "*verbose_indent+_s_iter+_s_losses_qt+_s_times)
         if breakcond: break 
         s = 1/beta
@@ -845,17 +865,18 @@ def minres(
         qrnorm = phibar
         rnorm = qrnorm
         Acond = gmax/gmin
-    if not return_data:
+    if store_data_iters==0:
         return x 
     else:
         data = {
             "x": x.to(default_device), 
-            "iterrange": torch.arange(iters+1), 
-            "times": times, 
-            "xs": xs,
-            "losses": losses,
-            "losses_quantiles": losses_quantiles,
+            "iterrange": torch.tensor(iterrange,dtype=int), 
+            "times": torch.tensor(times), 
+            "losses": torch.stack(losses,dim=0),
+            "losses_quantiles": {str(qt):torch.tensor(losses_quantiles[str(qt)]) for qt in quantiles_losses},
             }
+        if store_all_data:
+            data["xs"] = torch.stack(xs,dim=0)
         return x,data
 
 if __name__=="__main__":
@@ -897,16 +918,15 @@ if __name__=="__main__":
     #     )
     # print_data_signatures(data)
 
-    n = 500
+    n = 100
     k = 3
-    A_diag = 2+torch.randn(2,4,n,generator=rng)
-    A_off_diag = torch.randn(2,4,n-1,generator=rng) 
-    A = torch.zeros(2,4,n,n)
+    A_diag = torch.randn(2,1,4,n,generator=rng)
+    A_off_diag = torch.randn(2,1,4,n-1,generator=rng) 
+    A = torch.zeros(2,1,4,n,n)
     A[...,torch.arange(n),torch.arange(n)] = A_diag 
     A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
     A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
-    print(torch.linalg.cond(A))
-    B = torch.rand(2,4,n,k,generator=rng)
+    B = torch.rand(2,6,1,n,k,generator=rng)
     X_true = torch.linalg.solve(A,B)
     torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
     def A_mult(x):
@@ -915,21 +935,4 @@ if __name__=="__main__":
         y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
         return y
     torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
-    X_minres = minres(A_mult,B,iters=1000)
-    print(X_minres)
-
-    # def A_mult(x):
-    #     y = x*A_diag[...,:,None]
-    #     y[...,1:,:] += x[...,:-1,:]*A_off_diag[...,:,None]
-    #     y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
-    #     return y[1,1,:,[0]]
-    # X_minres = minres(A_mult,B[1,1,:,[0]],iters=1000)
-    
-    
-    
-    # import scipy.sparse
-    # x,info = scipy.sparse.linalg.minres(A[1,1,:,:].numpy(),B[1,1,:,0].numpy(),rtol=1e-16)
-    # print(x.shape)
-    # r = A[1,1,:,:].numpy()@x-B[1,1,:,0].numpy()
-    # print((r**2).sum())
-    # print(info)
+    X_minres = minres(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None)
