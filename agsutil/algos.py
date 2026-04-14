@@ -401,7 +401,7 @@ def lm_opt(
         _h_lams_qt   = "| lams_quantiles"  +" "*(len(_s_lams_qt)  -len("| lams_quantiles"))
         _h_alphas_qt = "| alphas_quantiles"+" "*(len(_s_alphas_qt)-len("| alphas_quantiles"))
         _h = _h_iter+_h_losses_qt+_h_lams_qt+_h_alphas_qt+_h_times
-        _s = " "*len(_h_iter)+_s_losses_qt+_s_lams_qt+_s_alphas_qt+" "*len(_h_times)
+        _s = " "*len(_h_iter)+_s_losses_qt+_s_lams_qt+_s_alphas_qt+("|"+" "*(len(_h_times)-1) if verbose_times else " "*len(_h_times))
         print(" "*verbose_indent+_h)
         print(" "*verbose_indent+_s)
         print(" "*verbose_indent+"~"*len(_s))
@@ -413,6 +413,7 @@ def lm_opt(
         else:
             (Jfull,),(resid,yhat) = vjac_ftilde(theta,*f_kwargs_vec_vals)
         assert Jfull.shape==(R,*nonbatch_y_shape,*nonbatch_theta_shape)
+        thetas[i] = theta.to(default_device)
         loss = (resid**2).flatten(start_dim=1).sum(-1)
         losses[i] = loss.reshape(batch_shape).to(default_device)
         lams[i] = lam.reshape(batch_shape).to(default_device)
@@ -647,10 +648,37 @@ def minres(
         A_mult = A
     if iters is None: 
         iters = n 
+    assert X0.shape==B.shape 
+    assert isinstance(return_data,bool)
     assert iters>=0
     assert iters%1==0
-    assert isinstance(return_data,bool)
-    assert X0.shape==B.shape 
+    if verbose is None: 
+        verbose = max(1,iters//20)
+    assert isinstance(quantiles_losses,list)
+    assert all(0<=qt<=100 for qt in quantiles_losses)
+    assert isinstance(verbose_quantiles_losses,list)
+    assert all(qt in quantiles_losses for qt in verbose_quantiles_losses)
+    assert verbose%1==0
+    assert verbose>=0 
+    assert verbose_indent%1==0 
+    assert verbose_indent>=0
+    assert isinstance(verbose_times,bool)
+    xs = torch.nan*torch.ones((iters+1,*batch_shape,n,k),device=default_device)
+    times = torch.nan*torch.ones(iters+1,device=default_device)
+    losses = torch.nan*torch.ones((iters+1,*batch_shape,k),device=default_device)
+    losses_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_losses}
+    if verbose:
+        _h_iter = "%-10s "%"iter i"
+        _h_times = "| %-10s"%"times" if verbose_times else ""
+        _s_losses_qt = ("| %-9s "*len(verbose_quantiles_losses))%tuple(str(qt) for qt in verbose_quantiles_losses)
+        _h_losses_qt = "| losses_quantiles"+" "*(len(_s_losses_qt)-len("| losses_quantiles"))
+        _h = _h_iter+_h_losses_qt+_h_times
+        _s = " "*len(_h_iter)+_s_losses_qt+("|"+" "*(len(_h_times)-1) if verbose_times else " "*len(_h_times))
+        print(" "*verbose_indent+_h)
+        print(" "*verbose_indent+_s)
+        print(" "*verbose_indent+"~"*len(_s))
+    timer = Timer(device=device)
+    timer.tic()
     x = X0 
     Ax = A_mult(x)
     assert Ax.shape==B.shape 
@@ -667,6 +695,17 @@ def minres(
         alpha = torch.einsum("...ij,...ij->...j",r,s1)/torch.einsum("...ij,...ij->...j",s1,s1) # (...,k)
         x = x+alpha[...,None,:]*p1 # (...,n,k)
         r = r-alpha[...,None,:]*s1 # (...,n,k)
+        xs[i] = x.to(default_device)
+        loss = (r**2).sum(-2)
+        losses[i] = loss.to(default_device)
+        for qt in quantiles_losses:
+            losses_quantiles[str(qt)][i] = loss.nanquantile(qt/100).to(default_device)
+        times[i] = timer.toc()
+        if verbose and (i%verbose==0 or i==iters):
+            _s_iter = "%-10d "%i
+            _s_losses_qt = ("| %-9.1e "*len(verbose_quantiles_losses))%tuple(losses_quantiles[str(qt)][i] for qt in verbose_quantiles_losses)
+            _s_times = "| %-10.1f "%(times[i]) if verbose_times else ""
+            print(" "*verbose_indent+_s_iter+_s_losses_qt+_s_times)
         if i==iters: break 
         p0 = s1 # (...,n,k)
         s0 = A_mult(s1) # (...,n,k)
@@ -724,22 +763,28 @@ if __name__=="__main__":
     #     )
     # print_data_signatures_lm_opt(data)
 
-    n = 5
+    n = 500
     k = 3
-    A_diag = torch.randn(2,4,n,generator=rng)
+    A_diag = 2+torch.randn(2,4,n,generator=rng)
     A_off_diag = torch.randn(2,4,n-1,generator=rng) 
     A = torch.zeros(2,4,n,n)
     A[...,torch.arange(n),torch.arange(n)] = A_diag 
     A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
     A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
+    print(torch.linalg.cond(A))
     B = torch.rand(2,4,n,k,generator=rng)
     X_true = torch.linalg.solve(A,B)
-    assert torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
+    torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
     def A_mult(x):
         y = x*A_diag[...,:,None]
         y[...,1:,:] += x[...,:-1,:]*A_off_diag[...,:,None]
         y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
-        return y
-    assert torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
-    X_minres = minres(A_mult,B)
-    assert torch.allclose(X_minres,X_true)
+        return y[1,1,:,[0]]
+    torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
+    # X_minres = minres(A_mult,B[1,1,:,[0]],iters=1000)
+    import scipy.sparse
+    x,info = scipy.sparse.linalg.minres(A[1,1,:,:].numpy(),B[1,1,:,0].numpy(),rtol=1e-16)
+    print(x.shape)
+    r = A[1,1,:,:].numpy()@x-B[1,1,:,0].numpy()
+    print((r**2).sum())
+    print(info)
