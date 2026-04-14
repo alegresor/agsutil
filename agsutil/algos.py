@@ -84,7 +84,7 @@ def lm_opt(
         theta0 (torch.Tensor): Initial guess for parameters $\theta$. 
         ytrue (torch.Tensor): True `y` values, i.e. `f(theta_true)`. 
         iters (int): Number of iterations. 
-        residtol (float): Non-negative tolerance on the maximum residuals for early stopping.
+        residtol (float): Non-negative tolerance on the maximum residual for early stopping.
         batch_dims (int): Number of batch dimension. 
         f_kwargs_vec (dict): Keyword arguments to `f` which will be vectorized over the first dimension. 
         f_kwargs_no_vec (dict): Keyword arguments to `f` which will not be vectorized over the first dimension. 
@@ -106,10 +106,10 @@ def lm_opt(
         jacfwd (bool): If `True`, use `torch.func.jacfwd`, otherwise use `torch.func.jacrev`
         verbose (int): Controls logging verbosity
         
-            - If True, perform logging. 
+            - If `True`, perform logging. 
             - If a positive int, only log every verbose iterations. 
-            - If None, set to a reasonable positive int based on the maximum number of iterations
-            - If False, don't log. 
+            - If `None`, set to a reasonable positive int based on the maximum number of iterations
+            - If `False`, don't log. 
         
         verbose_indent (int): Positive number of indentation spaces for logging.
         quantiles_losses (list): Loss quantiles to record.
@@ -122,10 +122,10 @@ def lm_opt(
         warn (bool): If `False`, then suppress warnings.
         store_data_iters (int): Controls storage iterations with the same options as verbose. If `store_data_iters==0`, then the data is not collected or returned. 
 
-            - If True, store every iteration. 
+            - If `True`, store every iteration. 
             - If a positive int, only store every `store_data_iters` iterations. 
-            - If None, set to a reasonable positive int based on the maximum number of iterations
-            - If False, don't store data, and do not return data 
+            - If `None`, set to a reasonable positive int based on the maximum number of iterations
+            - If `False`, don't store data, and do not return data 
 
         store_all_data (bool): If `True`, store the `x` values as well as the metrics. 
     
@@ -138,6 +138,9 @@ def lm_opt(
         >>> torch.set_default_dtype(torch.float64)
         >>> rng = torch.Generator().manual_seed(7)
 
+        
+    Standard example
+    
         >>> x = torch.rand((10,4,),generator=rng)
         >>> theta_true = torch.rand((4,),generator=rng)
         >>> ytrue = torch.exp((x*theta_true).sum(-1)) # (10,)
@@ -215,6 +218,8 @@ def lm_opt(
             data['lams'].shape = (4,)
             data['alphas'].shape = (4,)
 
+    Batched example 
+        
         >>> x = torch.rand((3,3,3,2,2),generator=rng)
         >>> theta_true = torch.rand((4,4,2,2),generator=rng)
         >>> ytrue = torch.exp((x*theta_true[...,None,None,None,:,:]).sum((-2,-1))) # (4,4,3,3,3)
@@ -539,11 +544,9 @@ def minres(
         store_all_data = False,
         ):
     r"""
-    [MINRES algorithm](https://en.wikipedia.org/wiki/Minimal_residual_method) for solving symmetric linear systems 
+    [MINRES algorithm](https://en.wikipedia.org/wiki/Minimal_residual_method) for solving linear systems $AX=B$ where $A$ symmetric
 
-    $$AX=B$$
-
-    A translation of `[scipy.sparse.linalg.minres](https://github.com/scipy/scipy/blob/v1.17.0/scipy/sparse/linalg/_isolve/minres.py)`.
+    A translation of [`scipy.sparse.linalg.minres`](https://github.com/scipy/scipy/blob/v1.17.0/scipy/sparse/linalg/_isolve/minres.py).
 
     Args:
         A (Union[torch.Tensor,callable]): Symmetric matrix `A` with shape `(...,n,n)`, or  
@@ -551,13 +554,13 @@ def minres(
         B (torch.Tensor): Right hand side tensor $B$ with shape `(...,n,k)`
         X0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
         iters (int): number of minres iterations, defaults to `5n`. 
-        residtol (float): Non-negative tolerance on the maximum residuals for early stopping.
+        residtol (float): Non-negative tolerance on the maximum residual for early stopping.
         verbose (int): Controls logging verbosity
 
-            - If True, perform logging. 
+            - If `True`, perform logging. 
             - If a positive int, only log every `verbose` iterations. 
-            - If None, set to a reasonable positive int based on the maximum number of iterations
-            - If False, don't log. 
+            - If `None`, set to a reasonable positive int based on the maximum number of iterations
+            - If `False`, don't log. 
         
         verbose_indent (int): Positive number of indentation spaces for logging.
         quantiles_losses (list): Loss quantiles to record.
@@ -566,10 +569,10 @@ def minres(
         warn (bool): If `False`, then suppress warnings.
         store_data_iters (int): Controls storage iterations with the same options as verbose. If `store_data_iters==0`, then the data is not collected or returned. 
 
-            - If True, store every iteration. 
+            - If `True`, store every iteration. 
             - If a positive int, only store every `store_data_iters` iterations. 
-            - If None, set to a reasonable positive int based on the maximum number of iterations
-            - If False, don't store data, and do not return data 
+            - If `None`, set to a reasonable positive int based on the maximum number of iterations
+            - If `False`, don't store data, and do not return data 
 
         store_all_data (bool): If `True`, store the `x` values as well as the metrics. 
 
@@ -582,7 +585,7 @@ def minres(
         >>> torch.set_default_dtype(torch.float64)
         >>> rng = torch.Generator().manual_seed(7)
 
-        Column vector $b$ 
+    Column vector $b$ 
         
         >>> n = 5
         >>> A = torch.randn(n,n,generator=rng)
@@ -606,7 +609,7 @@ def minres(
         >>> torch.allclose(x_minres,x_true)
         True
 
-        Matrix $B$
+    Matrix $B$
         
         >>> n = 5
         >>> k = 3
@@ -635,7 +638,7 @@ def minres(
         >>> torch.allclose(X_minres,X_true)
         True
 
-        Tri-diagonal $A$ with torage-saving multiplication function 
+    Tri-diagonal $A$ with storage-saving multiplication function 
         
         >>> n = 5
         >>> k = 3
@@ -681,7 +684,7 @@ def minres(
         >>> torch.allclose(X_minres,X_true)
         True
 
-        Batched tri-diagonal $A$ with torage-saving multiplication function 
+    Batched tri-diagonal $A$ with storage-saving multiplication function 
 
         >>> n = 100
         >>> k = 3
@@ -819,8 +822,6 @@ def minres(
     epsln = torch.zeros(1)
     phibar = beta1
     tnorm2 = 0
-    gmax = torch.zeros(1)
-    gmin = torch.finfo(B.dtype).max*torch.ones(1)
     cs = -1
     sn = 0
     w = torch.zeros_like(B)
@@ -870,8 +871,6 @@ def minres(
         gbar = sn*dbar-cs*alfa
         epsln = sn*beta
         dbar = -cs*beta
-        root = torch.linalg.norm(torch.stack([gbar,dbar],dim=-1),dim=-1)
-        Arnorm = phibar*root
         gamma = torch.linalg.norm(torch.stack([gbar,beta],dim=-1),dim=-1)
         gamma = torch.maximum(gamma,eps*torch.ones(1))
         cs = gbar/gamma
@@ -883,8 +882,6 @@ def minres(
         w2 = w
         w = (v-oldeps[...,None,:]*w1-delta[...,None,:]*w2)*denom[...,None,:]
         x = x+phi[...,None,:]*w
-        gmax = torch.maximum(gmax,gamma)
-        gmin = torch.minimum(gmin,gamma)
     if store_data_iters==0:
         return x 
     else:
@@ -905,23 +902,23 @@ if __name__=="__main__":
         torch.set_default_dtype(torch.float64)
     rng = torch.Generator(device=device).manual_seed(7)
 
-    x = torch.rand((10,4,),generator=rng)
-    theta_true = torch.rand((4,),generator=rng)
-    ytrue = torch.exp((x*theta_true).sum(-1)) # (10,)
-    def f(theta):
-        yhat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
-        return yhat
-    theta_hat,data = lm_opt(
-        f = f, 
-        theta0 = torch.rand_like(theta_true,generator=rng),
-        ytrue = ytrue,
-        iters = 50,
-        batch_dims = 0,
-        verbose = True,
-        verbose_times = False,
-        store_data_iters = None,
-        store_all_data = True,
-        )
+    # x = torch.rand((10,4,),generator=rng)
+    # theta_true = torch.rand((4,),generator=rng)
+    # ytrue = torch.exp((x*theta_true).sum(-1)) # (10,)
+    # def f(theta):
+    #     yhat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
+    #     return yhat
+    # theta_hat,data = lm_opt(
+    #     f = f, 
+    #     theta0 = torch.rand_like(theta_true,generator=rng),
+    #     ytrue = ytrue,
+    #     iters = 50,
+    #     batch_dims = 0,
+    #     verbose = True,
+    #     verbose_times = False,
+    #     store_data_iters = None,
+    #     store_all_data = True,
+    #     )
     # print_data_signatures(data,show_device=True)
 
     # x = torch.rand((3,3,3,2,2),generator=rng,device=device)
@@ -942,21 +939,21 @@ if __name__=="__main__":
     #     )
     # print_data_signatures(data)
 
-    # n = 100
-    # k = 3
-    # A_diag = torch.randn(2,1,4,n,generator=rng)
-    # A_off_diag = torch.randn(2,1,4,n-1,generator=rng) 
-    # A = torch.zeros(2,1,4,n,n)
-    # A[...,torch.arange(n),torch.arange(n)] = A_diag 
-    # A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
-    # A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
-    # B = torch.rand(2,6,1,n,k,generator=rng)
-    # X_true = torch.linalg.solve(A,B)
-    # torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
-    # def A_mult(x):
-    #     y = x*A_diag[...,:,None]
-    #     y[...,1:,:] += x[...,:-1,:]*A_off_diag[...,:,None]
-    #     y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
-    #     return y
-    # torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
-    # X_minres = minres(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None)
+    n = 100
+    k = 3
+    A_diag = torch.randn(2,1,4,n,generator=rng)
+    A_off_diag = torch.randn(2,1,4,n-1,generator=rng) 
+    A = torch.zeros(2,1,4,n,n)
+    A[...,torch.arange(n),torch.arange(n)] = A_diag 
+    A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
+    A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
+    B = torch.rand(2,6,1,n,k,generator=rng)
+    X_true = torch.linalg.solve(A,B)
+    torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
+    def A_mult(x):
+        y = x*A_diag[...,:,None]
+        y[...,1:,:] += x[...,:-1,:]*A_off_diag[...,:,None]
+        y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
+        return y
+    torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
+    X_minres = minres(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None)
