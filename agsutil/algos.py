@@ -528,6 +528,8 @@ def minres(
         >>> torch.set_default_dtype(torch.float64)
         >>> rng = torch.Generator().manual_seed(7)
 
+        Column vector $b$ 
+        
         >>> n = 5
         >>> A = torch.randn(n,n,generator=rng)
         >>> A = (A+A.T)/2
@@ -541,6 +543,8 @@ def minres(
         >>> torch.allclose(x_minres,x_true)
         True
 
+        Matrix $B$
+        
         >>> n = 5
         >>> k = 3
         >>> A = torch.randn(n,n,generator=rng)
@@ -559,6 +563,8 @@ def minres(
         >>> torch.allclose(X_minres,X_true)
         True
 
+        Tri-diagonal $A$ with torage-saving multiplication function 
+        
         >>> n = 5
         >>> k = 3
         >>> A_diag = torch.randn(n,generator=rng)
@@ -591,6 +597,33 @@ def minres(
         >>> torch.allclose(A_mult(X_true),A@X_true)
         True
         >>> X_minres = minres(A_mult,B)
+        >>> torch.allclose(X_minres,X_true)
+        True
+
+        Batched tri-diagonal $A$ with torage-saving multiplication function 
+
+        >>> n = 5
+        >>> k = 3
+        >>> A_diag = torch.randn(2,4,n,generator=rng)
+        >>> A_off_diag = torch.randn(2,4,n-1,generator=rng) 
+        >>> A = torch.zeros(2,4,n,n)
+        >>> A[...,torch.arange(n),torch.arange(n)] = A_diag 
+        >>> A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
+        >>> A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
+        >>> B = torch.rand(2,4,n,k,generator=rng)
+        >>> X_true = torch.linalg.solve(A,B)
+        >>> torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
+        True
+        >>> def A_mult(x):
+        ...     y = x*A_diag[...,:,None]
+        ...     y[...,1:,:] += x[...,:-1,:]*A_off_diag[...,:,None]
+        ...     y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
+        ...     return y
+        >>> torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
+        True
+        >>> X_minres = minres(A_mult,B)
+        >>> X_minres.shape
+        torch.Size([2, 4, 5, 3])
         >>> torch.allclose(X_minres,X_true)
         True
     """
@@ -693,22 +726,20 @@ if __name__=="__main__":
 
     n = 5
     k = 3
-    A_diag = torch.randn(n,generator=rng)
-    A_off_diag = torch.randn(n-1,generator=rng) 
-    A = torch.zeros(n,n)
-    A[torch.arange(n),torch.arange(n)] = A_diag 
-    A[torch.arange(n-1),torch.arange(1,n)] = A_off_diag
-    A[torch.arange(1,n),torch.arange(n-1)] = A_off_diag
-    print(A)
-    B = torch.rand(n,k,generator=rng)
+    A_diag = torch.randn(2,4,n,generator=rng)
+    A_off_diag = torch.randn(2,4,n-1,generator=rng) 
+    A = torch.zeros(2,4,n,n)
+    A[...,torch.arange(n),torch.arange(n)] = A_diag 
+    A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
+    A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
+    B = torch.rand(2,4,n,k,generator=rng)
     X_true = torch.linalg.solve(A,B)
-    print(X_true)
-    assert torch.allclose(A@X_true-B,torch.zeros_like(B))
+    assert torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
     def A_mult(x):
-        y = x*A_diag[:,None]
-        y[1:,:] += x[:-1,:]*A_off_diag[:,None]
-        y[:-1,:] += x[1:,:]*A_off_diag[:,None]
+        y = x*A_diag[...,:,None]
+        y[...,1:,:] += x[...,:-1,:]*A_off_diag[...,:,None]
+        y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
         return y
-    assert torch.allclose(A_mult(X_true),A@X_true)
+    assert torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
     X_minres = minres(A_mult,B)
     assert torch.allclose(X_minres,X_true)
