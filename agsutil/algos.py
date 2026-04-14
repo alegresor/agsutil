@@ -72,6 +72,8 @@ def lm_opt(
         verbose_quantiles_alphas = [5,25,50,75,90],
         verbose_times = True, 
         warn = True,
+        store_data_iters = False,
+        store_all_data = False, 
         ):
     r"""
     Levenberg--Marquardt optimization 
@@ -116,10 +118,18 @@ def lm_opt(
         verbose_quantiles_alphas (list): $\alpha$ quantiles to show in verbose log.
         verbose_times (bool): If `False`, do not show the times in the verbose log. This is mostly for testing where timing is not reproducible. 
         warn (bool): If `False`, then suppress warnings.
+        store_data_iters (int): Controls storage iterations with the same options as verbose. If `store_data_iters==0`, then the data is not collected or returned. 
+
+            - If True, store every iteration. 
+            - If a positive int, only store every `store_data_iters` iterations. 
+            - If None, set to a reasonable positive int based on the maximum number of iterations
+            - If False, don't store data, and do not return data 
+
+        store_all_data (bool): If `True`, store the `x` values as well as the metrics. 
     
     Returns:
         theta (torch.Tensor): Optimized parameters.
-        data (dict): Iteration data.
+        data (dict): Iteration data, only returned when `store_data_iters>0`
 
     Examples:
 
@@ -140,6 +150,8 @@ def lm_opt(
         ...     batch_dims = 0,
         ...     verbose = True,
         ...     verbose_times = False,
+        ...     store_data_iters = None,
+        ...     store_all_data = True,
         ...     )
             iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        
@@ -154,10 +166,6 @@ def lm_opt(
             data['theta'].shape = (4,)
             data['iterrange'].shape = (4,)
             data['times'].shape = (4,)
-            data['thetas'].shape = (4, 4)
-            data['losses'].shape = (4,)
-            data['lams'].shape = (4,)
-            data['alphas'].shape = (4,)
             data['losses_quantiles']
                 data['losses_quantiles']['0'].shape = (4,)
                 data['losses_quantiles']['1'].shape = (4,)
@@ -200,6 +208,10 @@ def lm_opt(
                 data['alphas_quantiles']['95'].shape = (4,)
                 data['alphas_quantiles']['99'].shape = (4,)
                 data['alphas_quantiles']['100'].shape = (4,)
+            data['thetas'].shape = (4, 4)
+            data['losses'].shape = (4,)
+            data['lams'].shape = (4,)
+            data['alphas'].shape = (4,)
 
         >>> x = torch.rand((3,3,3,2,2),generator=rng)
         >>> theta_true = torch.rand((4,4,2,2),generator=rng)
@@ -217,6 +229,8 @@ def lm_opt(
         ...     alpha_factors = [torch.tensor([2/3,1,3/2])],
         ...     verbose = True,
         ...     verbose_times = False,
+        ...     store_data_iters = None,
+        ...     store_all_data = True,
         ...     )
             iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        | 5         | 25        | 50        | 75        | 90        
@@ -230,10 +244,6 @@ def lm_opt(
             data['theta'].shape = (4, 4, 2, 2)
             data['iterrange'].shape = (3,)
             data['times'].shape = (3,)
-            data['thetas'].shape = (3, 4, 4, 2, 2)
-            data['losses'].shape = (3, 4, 4)
-            data['lams'].shape = (3, 4, 4)
-            data['alphas'].shape = (3, 4, 4)
             data['losses_quantiles']
                 data['losses_quantiles']['0'].shape = (3,)
                 data['losses_quantiles']['1'].shape = (3,)
@@ -276,6 +286,10 @@ def lm_opt(
                 data['alphas_quantiles']['95'].shape = (3,)
                 data['alphas_quantiles']['99'].shape = (3,)
                 data['alphas_quantiles']['100'].shape = (3,)
+            data['thetas'].shape = (3, 4, 4, 2, 2)
+            data['losses'].shape = (3, 4, 4)
+            data['lams'].shape = (3, 4, 4)
+            data['alphas'].shape = (3, 4, 4)
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
@@ -317,6 +331,13 @@ def lm_opt(
     f_kwargs_vec_vals = [ytrue]+f_kwargs_vec_vals
     if verbose is None: 
         verbose = max(1,iters//20)
+    assert verbose%1==0
+    assert verbose>=0 
+    if store_data_iters is None: 
+        store_data_iters = max(1,iters//1000)
+    assert store_data_iters%1==0
+    assert store_data_iters>=0 
+    assert isinstance(store_all_data,bool)
     assert lam0>0
     assert alpha0>0
     if np.isscalar(lam_factors):
@@ -352,19 +373,20 @@ def lm_opt(
     assert all(qt in quantiles_lams for qt in verbose_quantiles_lams)
     assert isinstance(verbose_quantiles_alphas,list)
     assert all(qt in quantiles_alphas for qt in verbose_quantiles_alphas)
-    assert verbose%1==0
-    assert verbose>=0 
     assert verbose_indent%1==0 
     assert verbose_indent>=0
     assert isinstance(verbose_times,bool)
-    thetas = torch.nan*torch.ones((iters+1,*batch_shape,*nonbatch_theta_shape),device=default_device)
-    times = torch.nan*torch.ones(iters+1,device=default_device)
-    losses = torch.nan*torch.ones((iters+1,*batch_shape),device=default_device)
-    lams = torch.nan*torch.ones((iters+1,*batch_shape),device=default_device)
-    alphas = torch.nan*torch.ones((iters+1,*batch_shape),device=default_device)
-    losses_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_losses}
-    lams_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_lams}
-    alphas_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_alphas}
+    if store_data_iters:
+        iterrange = []
+        times = []
+        losses = []
+        losses_quantiles = {str(qt):[] for qt in quantiles_losses}
+        lams_quantiles = {str(qt):[] for qt in quantiles_lams}
+        alphas_quantiles = {str(qt):[] for qt in quantiles_alphas}
+        if store_all_data:
+            thetas = []
+            lams = []
+            alphas = []
     def f_resid(theta, *f_kwargs_vec_vals):
         assert len(f_kwargs_vec_vals)==len(f_kwargs_vec_names)
         ytrue = f_kwargs_vec_vals[0]
@@ -410,32 +432,41 @@ def lm_opt(
         print(" "*verbose_indent+"~"*len(_s))
     timer = Timer(device=device)
     timer.tic()
+    residtol = 1e-8 # TODO: 
     for i in range(iters+1):
         if i==iters:
             _,(resid,yhat) = f_resid(theta,*f_kwargs_vec_vals)
         else:
             (Jfull,),(resid,yhat) = vjac_ftilde(theta,*f_kwargs_vec_vals)
         assert Jfull.shape==(R,*nonbatch_y_shape,*nonbatch_theta_shape)
-        thetas[i] = theta.reshape(*batch_shape,*nonbatch_theta_shape).to(default_device)
+        breakcond = i==iters or resid.abs().amax()<=residtol
         loss = (resid**2).flatten(start_dim=1).sum(-1)
-        losses[i] = loss.reshape(batch_shape).to(default_device)
-        lams[i] = lam.reshape(batch_shape).to(default_device)
-        alphas[i] = alpha.reshape(batch_shape).to(default_device)
-        for qt in quantiles_losses:
-            losses_quantiles[str(qt)][i] = loss.nanquantile(qt/100).to(default_device)
-        for qt in quantiles_lams:
-            lams_quantiles[str(qt)][i] = lam.nanquantile(qt/100).to(default_device)
-        for qt in quantiles_alphas:
-            alphas_quantiles[str(qt)][i] = alpha.nanquantile(qt/100).to(default_device)
-        times[i] = timer.toc()
+        times_i = timer.toc()
+        losses_quantiles_i = {str(qt): loss.nanquantile(qt/100) for qt in quantiles_losses}
+        lams_quantiles_i = {str(qt): lam.nanquantile(qt/100) for qt in quantiles_lams}
+        alphas_quantiles_i = {str(qt): alpha.nanquantile(qt/100) for qt in quantiles_alphas}
+        if store_data_iters and (i%store_data_iters==0 or breakcond):
+            iterrange.append(i)
+            losses.append(loss.reshape(batch_shape).to(default_device))
+            times.append(times_i)
+            for qt in quantiles_losses:
+                losses_quantiles[str(qt)].append(losses_quantiles_i[str(qt)].to(default_device))
+            for qt in quantiles_lams:
+                lams_quantiles[str(qt)].append(lams_quantiles_i[str(qt)].to(default_device))
+            for qt in quantiles_alphas:
+                alphas_quantiles[str(qt)].append(alphas_quantiles_i[str(qt)].to(default_device))
+            if store_all_data:
+                thetas.append(theta.reshape(*batch_shape,*nonbatch_theta_shape).to(default_device))
+                lams.append(lam.reshape(batch_shape).to(default_device))
+                alphas.append(alpha.reshape(batch_shape).to(default_device))
         if verbose and (i%verbose==0 or i==iters):
             _s_iter = "%-10d "%i
-            _s_losses_qt = ("| %-9.1e "*len(verbose_quantiles_losses))%tuple(losses_quantiles[str(qt)][i] for qt in verbose_quantiles_losses)
-            _s_lams_qt = ("| %-9.1e "*len(verbose_quantiles_lams))%tuple(lams_quantiles[str(qt)][i] for qt in verbose_quantiles_lams)
-            _s_alphas_qt = ("| %-9.1e "*len(verbose_quantiles_alphas))%tuple(alphas_quantiles[str(qt)][i] for qt in verbose_quantiles_alphas)
-            _s_times = "| %-10.1f "%(times[i]) if verbose_times else ""
+            _s_losses_qt = ("| %-9.1e "*len(verbose_quantiles_losses))%tuple(losses_quantiles_i[str(qt)] for qt in verbose_quantiles_losses)
+            _s_lams_qt = ("| %-9.1e "*len(verbose_quantiles_lams))%tuple(lams_quantiles_i[str(qt)] for qt in verbose_quantiles_lams)
+            _s_alphas_qt = ("| %-9.1e "*len(verbose_quantiles_alphas))%tuple(alphas_quantiles_i[str(qt)] for qt in verbose_quantiles_alphas)
+            _s_times = "| %-10.1f "%(times_i) if verbose_times else ""
             print(" "*verbose_indent+_s_iter+_s_losses_qt+_s_lams_qt+_s_alphas_qt+_s_times)
-        if i==iters: break
+        if breakcond: break
         J = Jfull.reshape((R,K,T))
         residf = resid.reshape((R,K))
         gamma = torch.einsum("rij,ri->rj",J,residf)
@@ -472,19 +503,23 @@ def lm_opt(
         alpha[improved] = alpha_best_new[improved]
         theta[improved] = thetas_best_new[improved]
     theta = theta.reshape((*batch_shape,*nonbatch_theta_shape))
-    data = {
-        "theta": theta.to(default_device), 
-        "iterrange": torch.arange(iters+1), 
-        "times": times, 
-        "thetas": thetas,
-        "losses": losses,
-        "lams": lams, 
-        "alphas": alphas,
-        "losses_quantiles": losses_quantiles,
-        "lams_quantiles": lams_quantiles,
-        "alphas_quantiles": alphas_quantiles,
-        }
-    return theta,data
+    if store_data_iters==0:
+        return theta 
+    else:
+        data = {
+            "theta": theta.to(default_device), 
+            "iterrange": torch.tensor(iterrange,dtype=int), 
+            "times": torch.tensor(times), 
+            "losses_quantiles": {str(qt):torch.tensor(losses_quantiles[str(qt)]) for qt in quantiles_losses},
+            "lams_quantiles": {str(qt):torch.tensor(lams_quantiles[str(qt)]) for qt in quantiles_lams},
+            "alphas_quantiles": {str(qt):torch.tensor(alphas_quantiles[str(qt)]) for qt in quantiles_alphas},
+            }
+        if store_all_data:
+            data["thetas"] = torch.stack(thetas,dim=0)
+            data["losses"] = torch.stack(losses,dim=0)
+            data["lams"] = torch.stack(lams,dim=0)
+            data["alphas"] = torch.stack(alphas,dim=0)
+        return theta,data
 
 def minres(
         A,
@@ -629,7 +664,7 @@ def minres(
         ...     return y
         >>> torch.allclose(A_mult(X_true),A@X_true)
         True
-        >>> X_minres,data = minres(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None)
+        >>> X_minres = minres(A_mult,B,verbose=None,verbose_times=False)
             iter i     | losses_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -641,7 +676,6 @@ def minres(
             5          | 7.6e-15   | 8.4e-15   | 9.5e-15   | 9.9e-15   | 1.0e-14   
         >>> torch.allclose(X_minres,X_true)
         True
-        >>> 
 
         Batched tri-diagonal $A$ with torage-saving multiplication function 
 
@@ -684,7 +718,6 @@ def minres(
             data['x'].shape = (2, 6, 4, 100, 3)
             data['iterrange'].shape = (152,)
             data['times'].shape = (152,)
-            data['losses'].shape = (152, 2, 6, 4, 3)
             data['losses_quantiles']
                 data['losses_quantiles']['0'].shape = (152,)
                 data['losses_quantiles']['1'].shape = (152,)
@@ -700,6 +733,7 @@ def minres(
                 data['losses_quantiles']['99'].shape = (152,)
                 data['losses_quantiles']['100'].shape = (152,)
             data['xs'].shape = (152, 2, 6, 4, 100, 3)
+            data['losses'].shape = (152, 2, 6, 4, 3)
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
@@ -872,11 +906,11 @@ def minres(
             "x": x.to(default_device), 
             "iterrange": torch.tensor(iterrange,dtype=int), 
             "times": torch.tensor(times), 
-            "losses": torch.stack(losses,dim=0),
             "losses_quantiles": {str(qt):torch.tensor(losses_quantiles[str(qt)]) for qt in quantiles_losses},
             }
         if store_all_data:
             data["xs"] = torch.stack(xs,dim=0)
+            data["losses"] = torch.stack(losses,dim=0)
         return x,data
 
 if __name__=="__main__":
