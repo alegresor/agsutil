@@ -484,9 +484,9 @@ def lm_opt(
     return theta,data
 
 def minres(
-        a,
-        b,
-        x0 = None,
+        A,
+        B,
+        X0 = None,
         iters = None,
         verbose = None, 
         verbose_indent = 4,
@@ -502,10 +502,10 @@ def minres(
     $$AX=B$$
 
     Args:
-        a (Union[torch.Tensor,callable]): Symmetric matrix `A` with shape `(...,n,n)`, or  
-            `callable(A)` where `a(x)` should return the batch matrix multiplication of `A` and `x`,  
-        b (torch.Tensor): Right hand side tensor $B$ with shape `(...,n,k)`
-        x0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
+        A (Union[torch.Tensor,callable]): Symmetric matrix `A` with shape `(...,n,n)`, or  
+            `callable(A)` where `a(x)` should return the batch matrix multiplication of `A` and `X`,  
+        B (torch.Tensor): Right hand side tensor $B$ with shape `(...,n,k)`
+        X0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
         iters (int): number of minres iterations, defaults to the matrix size `n`. 
         verbose (int): Controls logging verbosity
         
@@ -535,42 +535,96 @@ def minres(
         >>> x_true = torch.linalg.solve(A,b[...,None])[...,0]
         >>> x_true
         tensor([-0.1402,  0.4565,  0.2920,  0.2470,  0.3251])
-        >>> r_true = A@x_true-b
         >>> torch.allclose(A@x_true-b,torch.zeros_like(b))
         True
         >>> x_minres = minres(A,b[...,None])[...,0]
         >>> torch.allclose(x_minres,x_true)
         True
+
+        >>> torch.set_default_dtype(torch.float64)
+        >>> rng = torch.Generator().manual_seed(7)
+        >>> n = 5
+        >>> k = 3
+        >>> A = torch.randn(n,n,generator=rng)
+        >>> A = (A+A.T)/2
+        >>> B = torch.rand(n,k,generator=rng)
+        >>> X_true = torch.linalg.solve(A,B)
+        >>> X_true
+        tensor([[ 0.2369,  0.4964,  0.8488],
+                [ 0.4977,  0.2822,  0.4351],
+                [-0.2567, -0.1640, -0.0980],
+                [ 0.1245,  0.2355,  0.1212],
+                [ 0.4932, -0.0488, -0.0442]])
+        >>> torch.allclose(A@X_true-B,torch.zeros_like(B))
+        True
+        >>> X_minres = minres(A,B)
+        >>> torch.allclose(X_minres,X_true)
+        True
+
+        >>> n = 5
+        >>> k = 3
+        >>> A_diag = torch.randn(n,generator=rng)
+        >>> A_off_diag = torch.randn(n-1,generator=rng) 
+        >>> A = torch.zeros(n,n)
+        >>> A[torch.arange(n),torch.arange(n)] = A_diag 
+        >>> A[torch.arange(n-1),torch.arange(1,n)] = A_off_diag
+        >>> A[torch.arange(1,n),torch.arange(n-1)] = A_off_diag
+        >>> A
+        tensor([[ 1.8317, -1.3031,  0.0000,  0.0000,  0.0000],
+                [-1.3031, -0.5535,  0.4350,  0.0000,  0.0000],
+                [ 0.0000,  0.4350,  1.0395, -1.1498,  0.0000],
+                [ 0.0000,  0.0000, -1.1498, -1.2601, -0.8150],
+                [ 0.0000,  0.0000,  0.0000, -0.8150,  0.4156]])
+        >>> B = torch.rand(n,k,generator=rng)
+        >>> X_true = torch.linalg.solve(A,B)
+        >>> X_true
+        tensor([[-0.1376, -0.0615, -0.1926],
+                [-0.3934, -0.4384, -0.6736],
+                [-0.1782,  0.0494, -0.2512],
+                [-0.5591, -0.3096, -0.7455],
+                [-0.0744,  0.0135,  0.8165]])
+        >>> assert torch.allclose(A@X_true-B,torch.zeros_like(B))
+        >>> def A_mult(x):
+        ...     y = x*A_diag[:,None]
+        ...     y[1:,:] += x[:-1,:]*A_off_diag[:,None]
+        ...     y[:-1,:] += x[1:,:]*A_off_diag[:,None]
+        ...     return y
+        >>> torch.allclose(A_mult(X_true),A@X_true)
+        True
+        >>> X_minres = minres(A_mult,B)
+        >>> torch.allclose(X_minres,X_true)
+        True
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
                 torch.set_default_dtype(torch.float64)'''%str(torch.get_default_dtype()))
-    device = str(b.device)
+    device = str(B.device)
     default_device = str(torch.get_default_device())
-    assert b.ndim>=2, "b should have shape (...,n,k)"
-    batch_shape = tuple(b.shape[:-2])
-    n = b.size(-2)
-    k = b.size(-1)
-    if x0 is None: 
-        x0 = torch.zeros_like(b)
-    if isinstance(a,torch.Tensor):
-        assert a.shape==(*batch_shape,n,n)
-        a_mult = lambda x: torch.einsum("...ij,...jk->...ik",a,x)
+    assert B.ndim>=2, "B should have shape (...,n,k)"
+    batch_shape = tuple(B.shape[:-2])
+    n = B.size(-2)
+    k = B.size(-1)
+    if X0 is None: 
+        X0 = torch.zeros_like(B)
+    if isinstance(A,torch.Tensor):
+        assert A.shape==(*batch_shape,n,n)
+        assert torch.allclose(A.transpose(dim0=-2,dim1=-1),A)
+        A_mult = lambda X: torch.einsum("...ij,...jk->...ik",A,X)
     else:
-        assert callable(a)
-        a_mult = a
+        assert callable(A)
+        A_mult = A
     if iters is None: 
         iters = n 
     assert iters>=0
     assert iters%1==0
     assert isinstance(return_data,bool)
-    assert x0.shape==b.shape 
-    x = x0 
-    Ax = a_mult(x)
-    assert Ax.shape==b.shape 
-    r = b-Ax # (...,n,k)
+    assert X0.shape==B.shape 
+    x = X0 
+    Ax = A_mult(x)
+    assert Ax.shape==B.shape 
+    r = B-Ax # (...,n,k)
     p0 = r # (...,n,k)
-    s0 = a_mult(p0) # (...,n,k)
+    s0 = A_mult(p0) # (...,n,k)
     p1 = p0 # (...,n,k)
     s1 = s0 # (...,n,k)
     for i in range(iters+1):
@@ -583,7 +637,7 @@ def minres(
         r = r-alpha[...,None,:]*s1 # (...,n,k)
         if i==iters: break 
         p0 = s1 # (...,n,k)
-        s0 = a_mult(s1) # (...,n,k)
+        s0 = A_mult(s1) # (...,n,k)
         beta1 = torch.einsum("...ij,...ij->...j",s0,s1)/torch.einsum("...ij,...ij->...j",s1,s1) # (...,k)
         p0 = p0-beta1[...,None,:]*p1 # (...,n,k)
         s0 = s0-beta1[...,None,:]*s1 # (...,n,k)
@@ -639,12 +693,23 @@ if __name__=="__main__":
     # print_data_signatures_lm_opt(data)
 
     n = 5
-    A = torch.randn(n,n,generator=rng)
-    A = (A+A.T)/2
-    b = torch.rand(n,generator=rng)
-    x_true = torch.linalg.solve(A,b[...,None])[...,0]
-    print(x_true)
-    r_true = A@x_true-b
-    assert torch.allclose(A@x_true-b,torch.zeros_like(b))
-    x_minres = minres(A,b[...,None])[...,0]
-    assert torch.allclose(x_minres,x_true)
+    k = 3
+    A_diag = torch.randn(n,generator=rng)
+    A_off_diag = torch.randn(n-1,generator=rng) 
+    A = torch.zeros(n,n)
+    A[torch.arange(n),torch.arange(n)] = A_diag 
+    A[torch.arange(n-1),torch.arange(1,n)] = A_off_diag
+    A[torch.arange(1,n),torch.arange(n-1)] = A_off_diag
+    print(A)
+    B = torch.rand(n,k,generator=rng)
+    X_true = torch.linalg.solve(A,B)
+    print(X_true)
+    assert torch.allclose(A@X_true-B,torch.zeros_like(B))
+    def A_mult(x):
+        y = x*A_diag[:,None]
+        y[1:,:] += x[:-1,:]*A_off_diag[:,None]
+        y[:-1,:] += x[1:,:]*A_off_diag[:,None]
+        return y
+    assert torch.allclose(A_mult(X_true),A@X_true)
+    X_minres = minres(A_mult,B)
+    assert torch.allclose(X_minres,X_true)
