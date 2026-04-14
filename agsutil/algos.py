@@ -31,7 +31,7 @@ class Timer():
             tdelta = self.t0.elapsed_time(self.tend)/1000
         return tdelta
 
-def print_data_signatures_lm_opt(data, show_device=False):
+def print_data_signatures(data, show_device=False):
     for key,val in data.items():
         if isinstance(val,torch.Tensor):
             _s = "    data['%s'].shape = %s"%(key,str(tuple(data[key].shape)))
@@ -62,7 +62,7 @@ def lm_opt(
         alpha_factors = [[1],[1/2,1,2]],
         vmap_chunk_size = None,
         jacfwd = True,
-        verbose = None, 
+        verbose = False, 
         verbose_indent = 4,
         quantiles_losses = [0,1,5,10,25,40,50,60,75,90,95,99,100],
         quantiles_lams =   [0,1,5,10,25,40,50,60,75,90,95,99,100],
@@ -104,6 +104,7 @@ def lm_opt(
         
             - If True, perform logging. 
             - If a positive int, only log every verbose iterations. 
+            - If None, set to a reasonable positive int based on the maximum number of iterations
             - If False, don't log. 
         
         verbose_indent (int): Positive number of indentation spaces for logging.
@@ -137,6 +138,7 @@ def lm_opt(
         ...     ytrue = ytrue,
         ...     iters = 3,
         ...     batch_dims = 0,
+        ...     verbose = True,
         ...     verbose_times = False,
         ...     )
             iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          
@@ -148,7 +150,7 @@ def lm_opt(
             3          | 3.3e-05   | 3.3e-05   | 3.3e-05   | 3.3e-05   | 3.3e-05   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
         >>> torch.allclose(theta_hat,theta_true,atol=5e-2)
         True
-        >>> print_data_signatures_lm_opt(data)
+        >>> print_data_signatures(data)
             data['theta'].shape = (4,)
             data['iterrange'].shape = (4,)
             data['times'].shape = (4,)
@@ -213,6 +215,7 @@ def lm_opt(
         ...     batch_dims = 2,
         ...     lam_factors = [torch.tensor([1/4,1/2,1,2,4])],
         ...     alpha_factors = [torch.tensor([2/3,1,3/2])],
+        ...     verbose = True,
         ...     verbose_times = False,
         ...     )
             iter i     | losses_quantiles                                          | lams_quantiles                                            | alphas_quantiles                                          
@@ -223,7 +226,7 @@ def lm_opt(
             2          | 1.0e-05   | 6.9e-04   | 1.8e-03   | 3.9e-03   | 1.2e+00   | 6.2e-08   | 6.2e-08   | 1.0e-06   | 1.0e-06   | 1.0e-06   | 6.7e-01   | 6.7e-01   | 1.0e+00   | 1.1e+00   | 1.5e+00   
         >>> torch.allclose(theta_hat,theta_true,atol=5e-2)
         False
-        >>> print_data_signatures_lm_opt(data)
+        >>> print_data_signatures(data)
             data['theta'].shape = (4, 4, 2, 2)
             data['iterrange'].shape = (3,)
             data['times'].shape = (3,)
@@ -488,7 +491,7 @@ def minres(
         B,
         X0 = None,
         iters = None,
-        verbose = None, 
+        verbose = False, 
         verbose_indent = 4,
         quantiles_losses = [0,1,5,10,25,40,50,60,75,90,95,99,100],
         verbose_quantiles_losses = [5,25,50,75,90],
@@ -510,9 +513,10 @@ def minres(
         X0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
         iters (int): number of minres iterations, defaults to `5n`. 
         verbose (int): Controls logging verbosity
-        
+
             - If True, perform logging. 
             - If a positive int, only log every verbose iterations. 
+            - If None, set to a reasonable positive int based on the maximum number of iterations
             - If False, don't log. 
         
         verbose_indent (int): Positive number of indentation spaces for logging.
@@ -542,16 +546,16 @@ def minres(
         tensor([-0.1402,  0.4565,  0.2920,  0.2470,  0.3251])
         >>> torch.allclose(A@x_true-b,torch.zeros_like(b))
         True
-        >>> x_minres = minres(A,b[...,None],verbose_times=False)[...,0]
+        >>> x_minres = minres(A,b[...,None],verbose=None,verbose_times=False)[...,0]
             iter i     | losses_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            0          | 1.2e+00   | 1.2e+00   | 1.2e+00   | 1.2e+00   | 1.2e+00   
-            1          | 4.7e-01   | 4.7e-01   | 4.7e-01   | 4.7e-01   | 4.7e-01   
-            2          | 5.5e-02   | 5.5e-02   | 5.5e-02   | 5.5e-02   | 5.5e-02   
-            3          | 4.3e-02   | 4.3e-02   | 4.3e-02   | 4.3e-02   | 4.3e-02   
-            4          | 6.6e-03   | 6.6e-03   | 6.6e-03   | 6.6e-03   | 6.6e-03   
-            5          | 3.6e-31   | 3.6e-31   | 3.6e-31   | 3.6e-31   | 3.6e-31   
+            0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 6.1e-01   | 6.1e-01   | 6.1e-01   | 6.1e-01   | 6.1e-01   
+            2          | 2.1e-01   | 2.1e-01   | 2.1e-01   | 2.1e-01   | 2.1e-01   
+            3          | 1.9e-01   | 1.9e-01   | 1.9e-01   | 1.9e-01   | 1.9e-01   
+            4          | 7.3e-02   | 7.3e-02   | 7.3e-02   | 7.3e-02   | 7.3e-02   
+            5          | 5.4e-16   | 5.4e-16   | 5.4e-16   | 5.4e-16   | 5.4e-16   
         >>> torch.allclose(x_minres,x_true)
         True
 
@@ -571,16 +575,16 @@ def minres(
                 [ 1.3653,  1.5421,  1.0192]])
         >>> torch.allclose(A@X_true-B,torch.zeros_like(B))
         True
-        >>> X_minres = minres(A,B,verbose_times=False)
+        >>> X_minres = minres(A,B,verbose=None,verbose_times=False)
             iter i     | losses_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            0          | 5.7e-01   | 9.8e-01   | 1.5e+00   | 1.6e+00   | 1.7e+00   
-            1          | 4.7e-01   | 8.0e-01   | 1.2e+00   | 1.5e+00   | 1.7e+00   
-            2          | 3.3e-01   | 5.2e-01   | 7.5e-01   | 7.7e-01   | 7.8e-01   
-            3          | 2.3e-01   | 2.8e-01   | 3.4e-01   | 3.8e-01   | 4.0e-01   
-            4          | 2.2e-01   | 2.6e-01   | 3.2e-01   | 3.3e-01   | 3.3e-01   
-            5          | 1.5e-29   | 4.8e-29   | 8.8e-29   | 1.0e-28   | 1.1e-28   
+            0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 9.0e-01   | 9.1e-01   | 9.1e-01   | 9.5e-01   | 9.8e-01   
+            2          | 6.5e-01   | 6.8e-01   | 7.2e-01   | 7.6e-01   | 7.7e-01   
+            3          | 4.8e-01   | 4.8e-01   | 4.8e-01   | 5.8e-01   | 6.4e-01   
+            4          | 4.4e-01   | 4.5e-01   | 4.6e-01   | 5.6e-01   | 6.3e-01   
+            5          | 4.4e-15   | 5.8e-15   | 7.7e-15   | 7.9e-15   | 8.0e-15   
         >>> torch.allclose(X_minres,X_true)
         True
 
@@ -617,30 +621,31 @@ def minres(
         ...     return y
         >>> torch.allclose(A_mult(X_true),A@X_true)
         True
-        >>> X_minres = minres(A_mult,B,verbose_times=False)
+        >>> X_minres,data = minres(A_mult,B,verbose=None,verbose_times=False,return_data=True)
             iter i     | losses_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            0          | 1.8e+00   | 2.1e+00   | 2.5e+00   | 2.7e+00   | 2.8e+00   
-            1          | 4.3e-01   | 8.8e-01   | 1.4e+00   | 1.6e+00   | 1.7e+00   
-            2          | 1.4e-01   | 2.2e-01   | 3.1e-01   | 4.6e-01   | 5.5e-01   
-            3          | 3.3e-02   | 8.4e-02   | 1.5e-01   | 2.1e-01   | 2.5e-01   
-            4          | 1.4e-02   | 6.8e-02   | 1.4e-01   | 1.7e-01   | 1.9e-01   
-            5          | 1.4e-28   | 1.6e-28   | 1.9e-28   | 2.2e-28   | 2.5e-28   
+            0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 4.0e-01   | 5.6e-01   | 7.7e-01   | 8.4e-01   | 8.8e-01   
+            2          | 2.2e-01   | 2.8e-01   | 3.5e-01   | 4.7e-01   | 5.4e-01   
+            3          | 1.1e-01   | 1.9e-01   | 2.9e-01   | 3.1e-01   | 3.2e-01   
+            4          | 4.0e-02   | 1.5e-01   | 2.8e-01   | 2.8e-01   | 2.8e-01   
+            5          | 7.6e-15   | 8.4e-15   | 9.5e-15   | 9.9e-15   | 1.0e-14   
         >>> torch.allclose(X_minres,X_true)
         True
+        >>> 
 
         Batched tri-diagonal $A$ with torage-saving multiplication function 
 
-        >>> n = 5
+        >>> n = 100
         >>> k = 3
-        >>> A_diag = torch.randn(2,4,n,generator=rng)
-        >>> A_off_diag = torch.randn(2,4,n-1,generator=rng) 
-        >>> A = torch.zeros(2,4,n,n)
+        >>> A_diag = torch.randn(2,1,4,n,generator=rng)
+        >>> A_off_diag = torch.randn(2,1,4,n-1,generator=rng) 
+        >>> A = torch.zeros(2,1,4,n,n)
         >>> A[...,torch.arange(n),torch.arange(n)] = A_diag 
         >>> A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
         >>> A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
-        >>> B = torch.rand(2,4,n,k,generator=rng)
+        >>> B = torch.rand(2,6,1,n,k,generator=rng)
         >>> X_true = torch.linalg.solve(A,B)
         >>> torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
         True
@@ -651,20 +656,42 @@ def minres(
         ...     return y
         >>> torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
         True
-        >>> X_minres = minres(A_mult,B,verbose_times=False)
+        >>> X_minres = minres(A_mult,B,verbose=None,verbose_times=False)
             iter i     | losses_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            0          | 7.7e-01   | 1.2e+00   | 1.5e+00   | 2.2e+00   | 2.7e+00   
-            1          | 1.8e-01   | 5.9e-01   | 1.3e+00   | 1.6e+00   | 2.5e+00   
-            2          | 5.8e-02   | 2.0e-01   | 3.4e-01   | 5.9e-01   | 1.1e+00   
-            3          | 1.9e-02   | 7.3e-02   | 1.7e-01   | 2.5e-01   | 5.4e-01   
-            4          | 3.8e-04   | 8.6e-03   | 4.5e-02   | 1.1e-01   | 2.5e-01   
-            5          | 1.6e-31   | 4.2e-31   | 2.7e-30   | 9.3e-30   | 5.9e-28   
+            0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            25         | 1.9e-01   | 2.3e-01   | 2.5e-01   | 2.8e-01   | 3.1e-01   
+            50         | 7.4e-02   | 1.2e-01   | 1.4e-01   | 1.6e-01   | 2.0e-01   
+            75         | 2.1e-02   | 4.0e-02   | 7.9e-02   | 1.1e-01   | 1.5e-01   
+            100        | 3.1e-03   | 7.2e-03   | 2.6e-02   | 7.6e-02   | 1.2e-01   
+            125        | 3.3e-07   | 2.9e-06   | 2.1e-04   | 5.6e-03   | 7.9e-02   
+            150        | 2.1e-15   | 1.0e-14   | 1.7e-12   | 1.3e-10   | 2.0e-09   
+            151        | 2.1e-15   | 8.7e-15   | 1.1e-12   | 8.9e-11   | 1.2e-09   
         >>> X_minres.shape
-        torch.Size([2, 4, 5, 3])
+        torch.Size([2, 6, 4, 100, 3])
         >>> torch.allclose(X_minres,X_true)
         True
+        >>> print_data_signatures(data)
+            data['x'].shape = (5, 3)
+            data['iterrange'].shape = (26,)
+            data['times'].shape = (26,)
+            data['xs'].shape = (26, 5, 3)
+            data['losses'].shape = (26, 3)
+            data['losses_quantiles']
+                data['losses_quantiles']['0'].shape = (26,)
+                data['losses_quantiles']['1'].shape = (26,)
+                data['losses_quantiles']['5'].shape = (26,)
+                data['losses_quantiles']['10'].shape = (26,)
+                data['losses_quantiles']['25'].shape = (26,)
+                data['losses_quantiles']['40'].shape = (26,)
+                data['losses_quantiles']['50'].shape = (26,)
+                data['losses_quantiles']['60'].shape = (26,)
+                data['losses_quantiles']['75'].shape = (26,)
+                data['losses_quantiles']['90'].shape = (26,)
+                data['losses_quantiles']['95'].shape = (26,)
+                data['losses_quantiles']['99'].shape = (26,)
+                data['losses_quantiles']['100'].shape = (26,)
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
@@ -672,13 +699,12 @@ def minres(
     device = str(B.device)
     default_device = str(torch.get_default_device())
     assert B.ndim>=2, "B should have shape (...,n,k)"
-    batch_shape = tuple(B.shape[:-2])
     n = B.size(-2)
     k = B.size(-1)
     if X0 is None: 
         X0 = torch.zeros_like(B)
     if isinstance(A,torch.Tensor):
-        assert A.shape==(*batch_shape,n,n)
+        assert A.shape[-2:]==(n,n)
         assert torch.allclose(A.transpose(dim0=-2,dim1=-1),A)
         matvec = lambda X: torch.einsum("...ij,...jk->...ik",A,X)
     else:
@@ -701,10 +727,6 @@ def minres(
     assert verbose_indent%1==0 
     assert verbose_indent>=0
     assert isinstance(verbose_times,bool)
-    xs = torch.nan*torch.ones((iters+1,*batch_shape,n,k),device=default_device)
-    times = torch.nan*torch.ones(iters+1,device=default_device)
-    losses = torch.nan*torch.ones((iters+1,*batch_shape,k),device=default_device)
-    losses_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_losses}
     if verbose:
         _h_iter = "%-10s "%"iter i"
         _h_times = "| %-10s"%"times" if verbose_times else ""
@@ -719,20 +741,6 @@ def minres(
     timer.tic()
     psolve = lambda X: X # TODO: implement more involved preconditioned solver
     inner = lambda a,b: torch.einsum("...ij,...ij->...j",a,b)
-    msg = [
-        ' beta2 = 0.  If M = I, b and x are eigenvectors    ',    # -1
-        ' beta1 = 0.  The exact solution is x0          ',       # 0
-        ' A solution to Ax = b was found, given rtol        ',   # 1
-        ' A least-squares solution was found, given rtol    ',   # 2
-        ' Reasonable accuracy achieved, given eps           ',   # 3
-        ' x has converged to an eigenvector                 ',   # 4
-        ' acond has exceeded 0.1/eps                        ',   # 5
-        ' The iteration limit was reached                   ',   # 6
-        ' A  does not define a symmetric matrix             ',   # 7
-        ' M  does not define a symmetric matrix             ',   # 8
-        ' M  does not define a pos-def preconditioner       ',   # 9
-        ]
-    istop = 0
     Anorm = 0
     Acond = 0
     rnorm = 0
@@ -740,7 +748,12 @@ def minres(
     eps = torch.finfo(B.dtype).eps
     x = X0 
     Ax = matvec(x)
-    assert Ax.shape==B.shape 
+    assert Ax.shape[-2:]==(n,k)
+    batch_shape = tuple(Ax.shape[:-2])
+    xs = torch.nan*torch.ones((iters+1,*batch_shape,n,k),device=default_device)
+    times = torch.nan*torch.ones(iters+1,device=default_device)
+    losses = torch.nan*torch.ones((iters+1,*batch_shape,k),device=default_device)
+    losses_quantiles = {str(qt):torch.nan*torch.ones(iters+1,device=default_device) for qt in quantiles_losses}
     r1 = B-Ax # (...,n,k)
     y = psolve(r1) # (...,n,k)
     beta1 = inner(r1,y) # (...,k)
@@ -768,8 +781,9 @@ def minres(
     rtol = 1e-5 # TODO: 
     residtol = 1e-8 # TODO: 
     for i in range(iters+1):
+        xs[i] = x.to(default_device)
         r = matvec(x)-B 
-        loss = (r**2).sum(-2)
+        loss = torch.linalg.norm(r,dim=-2)/bnorm
         losses[i] = loss.to(default_device)
         for qt in quantiles_losses:
             losses_quantiles[str(qt)][i] = loss.nanquantile(qt/100).to(default_device)
@@ -816,8 +830,8 @@ def minres(
         w2 = w
         w = (v-oldeps[...,None,:]*w1-delta[...,None,:]*w2)*denom[...,None,:]
         x = x+phi[...,None,:]*w
-        gmax = torch.maximum(gmax, gamma)
-        gmin = torch.minimum(gmin, gamma)
+        gmax = torch.maximum(gmax,gamma)
+        gmin = torch.minimum(gmin,gamma)
         z = rhs1/gamma
         rhs1 = rhs2-delta*z
         rhs2 = -epsln*z
@@ -835,7 +849,12 @@ def minres(
         return x 
     else:
         data = {
-            "x": x.to(default_device),
+            "x": x.to(default_device), 
+            "iterrange": torch.arange(iters+1), 
+            "times": times, 
+            "xs": xs,
+            "losses": losses,
+            "losses_quantiles": losses_quantiles,
             }
         return x,data
 
@@ -858,7 +877,7 @@ if __name__=="__main__":
     #     iters = 3,
     #     # jacfwd=False,
     #     )
-    # print_data_signatures_lm_opt(data,show_device=True)
+    # print_data_signatures(data,show_device=True)
 
     # x = torch.rand((3,3,3,2,2),generator=rng,device=device)
     # theta_true = torch.rand((4,4,2,2),generator=rng,device=device)
@@ -876,7 +895,7 @@ if __name__=="__main__":
     #     alpha_factors = [torch.tensor([2/3,1,3/2])],
     #     verbose_times = False,
     #     )
-    # print_data_signatures_lm_opt(data)
+    # print_data_signatures(data)
 
     n = 500
     k = 3
