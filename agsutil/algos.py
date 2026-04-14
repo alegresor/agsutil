@@ -53,6 +53,7 @@ def lm_opt(
         theta0,
         ytrue,
         iters = 10,
+        residtol = 1e-12,
         batch_dims = 0, 
         f_kwargs_vec = {},
         f_kwargs_no_vec = {},
@@ -83,6 +84,7 @@ def lm_opt(
         theta0 (torch.Tensor): Initial guess for parameters $\theta$. 
         ytrue (torch.Tensor): True `y` values, i.e. `f(theta_true)`. 
         iters (int): Number of iterations. 
+        residtol (float): Non-negative tolerance on the maximum residuals for early stopping.
         batch_dims (int): Number of batch dimension. 
         f_kwargs_vec (dict): Keyword arguments to `f` which will be vectorized over the first dimension. 
         f_kwargs_no_vec (dict): Keyword arguments to `f` which will not be vectorized over the first dimension. 
@@ -338,6 +340,7 @@ def lm_opt(
     assert store_data_iters%1==0
     assert store_data_iters>=0 
     assert isinstance(store_all_data,bool)
+    assert residtol>=0
     assert lam0>0
     assert alpha0>0
     if np.isscalar(lam_factors):
@@ -432,7 +435,6 @@ def lm_opt(
         print(" "*verbose_indent+"~"*len(_s))
     timer = Timer(device=device)
     timer.tic()
-    residtol = 1e-8 # TODO: 
     for i in range(iters+1):
         if i==iters:
             _,(resid,yhat) = f_resid(theta,*f_kwargs_vec_vals)
@@ -526,6 +528,7 @@ def minres(
         B,
         X0 = None,
         iters = None,
+        residtol = 1e-12,
         verbose = False, 
         verbose_indent = 4,
         quantiles_losses = [0,1,5,10,25,40,50,60,75,90,95,99,100],
@@ -548,6 +551,7 @@ def minres(
         B (torch.Tensor): Right hand side tensor $B$ with shape `(...,n,k)`
         X0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
         iters (int): number of minres iterations, defaults to `5n`. 
+        residtol (float): Non-negative tolerance on the maximum residuals for early stopping.
         verbose (int): Controls logging verbosity
 
             - If True, perform logging. 
@@ -709,31 +713,32 @@ def minres(
             100        | 3.1e-03   | 7.2e-03   | 2.6e-02   | 7.6e-02   | 1.2e-01   
             125        | 3.3e-07   | 2.9e-06   | 2.1e-04   | 5.6e-03   | 7.9e-02   
             150        | 2.1e-15   | 1.0e-14   | 1.7e-12   | 1.3e-10   | 2.0e-09   
-            151        | 2.1e-15   | 8.7e-15   | 1.1e-12   | 8.9e-11   | 1.2e-09   
+            175        | 1.9e-15   | 3.1e-15   | 5.2e-15   | 3.1e-14   | 3.8e-13   
+            181        | 1.8e-15   | 3.0e-15   | 5.0e-15   | 2.4e-14   | 1.1e-13   
         >>> X_minres.shape
         torch.Size([2, 6, 4, 100, 3])
         >>> torch.allclose(X_minres,X_true)
         True
         >>> print_data_signatures(data)
             data['x'].shape = (2, 6, 4, 100, 3)
-            data['iterrange'].shape = (152,)
-            data['times'].shape = (152,)
+            data['iterrange'].shape = (182,)
+            data['times'].shape = (182,)
             data['losses_quantiles']
-                data['losses_quantiles']['0'].shape = (152,)
-                data['losses_quantiles']['1'].shape = (152,)
-                data['losses_quantiles']['5'].shape = (152,)
-                data['losses_quantiles']['10'].shape = (152,)
-                data['losses_quantiles']['25'].shape = (152,)
-                data['losses_quantiles']['40'].shape = (152,)
-                data['losses_quantiles']['50'].shape = (152,)
-                data['losses_quantiles']['60'].shape = (152,)
-                data['losses_quantiles']['75'].shape = (152,)
-                data['losses_quantiles']['90'].shape = (152,)
-                data['losses_quantiles']['95'].shape = (152,)
-                data['losses_quantiles']['99'].shape = (152,)
-                data['losses_quantiles']['100'].shape = (152,)
-            data['xs'].shape = (152, 2, 6, 4, 100, 3)
-            data['losses'].shape = (152, 2, 6, 4, 3)
+                data['losses_quantiles']['0'].shape = (182,)
+                data['losses_quantiles']['1'].shape = (182,)
+                data['losses_quantiles']['5'].shape = (182,)
+                data['losses_quantiles']['10'].shape = (182,)
+                data['losses_quantiles']['25'].shape = (182,)
+                data['losses_quantiles']['40'].shape = (182,)
+                data['losses_quantiles']['50'].shape = (182,)
+                data['losses_quantiles']['60'].shape = (182,)
+                data['losses_quantiles']['75'].shape = (182,)
+                data['losses_quantiles']['90'].shape = (182,)
+                data['losses_quantiles']['95'].shape = (182,)
+                data['losses_quantiles']['99'].shape = (182,)
+                data['losses_quantiles']['100'].shape = (182,)
+            data['xs'].shape = (182, 2, 6, 4, 100, 3)
+            data['losses'].shape = (182, 2, 6, 4, 3)
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
@@ -757,6 +762,7 @@ def minres(
     assert X0.shape==B.shape 
     assert iters>=0
     assert iters%1==0
+    assert residtol>=0
     if verbose is None: 
         verbose = max(1,iters//20)
     assert verbose%1==0
@@ -788,9 +794,6 @@ def minres(
     psolve = lambda X: X # TODO: implement more involved preconditioned solver
     inner = lambda a,b: torch.einsum("...ij,...ij->...j",a,b)
     Anorm = 0
-    Acond = 0
-    rnorm = 0
-    ynorm = 0
     eps = torch.finfo(B.dtype).eps
     x = X0 
     Ax = matvec(x)
@@ -814,10 +817,7 @@ def minres(
     beta = beta1
     dbar = 0
     epsln = torch.zeros(1)
-    qrnorm = beta1
     phibar = beta1
-    rhs1 = beta1
-    rhs2 = 0
     tnorm2 = 0
     gmax = torch.zeros(1)
     gmin = torch.finfo(B.dtype).max*torch.ones(1)
@@ -828,11 +828,10 @@ def minres(
     r2 = r1
     shift = 0 # TODO: If shift != 0 then the method solves (A - shift*I)x = b
     rtol = 1e-5 # TODO: 
-    residtol = 1e-8 # TODO: 
     for i in range(iters+1):
-        r = matvec(x)-B 
-        breakcond = i==iters or r.abs().amax()<=residtol
-        loss = torch.linalg.norm(r,dim=-2)/bnorm
+        resid = matvec(x)-B 
+        breakcond = i==iters or resid.abs().amax()<=residtol
+        loss = torch.linalg.norm(resid,dim=-2)/bnorm
         times_i = timer.toc()
         losses_quantiles_i = {str(qt): loss.nanquantile(qt/100) for qt in quantiles_losses}
         if store_data_iters and (i%store_data_iters==0 or breakcond):
@@ -842,7 +841,7 @@ def minres(
             for qt in quantiles_losses:
                 losses_quantiles[str(qt)].append(losses_quantiles_i[str(qt)].to(default_device))
             if store_all_data:
-                xs.append(x.expand(r.shape).to(default_device))
+                xs.append(x.expand(resid.shape).to(default_device))
         if verbose and (i%verbose==0 or breakcond):
             _s_iter = "%-10d "%i
             _s_losses_qt = ("| %-9.1e "*len(verbose_quantiles_losses))%tuple(losses_quantiles_i[str(qt)] for qt in verbose_quantiles_losses)
@@ -886,19 +885,6 @@ def minres(
         x = x+phi[...,None,:]*w
         gmax = torch.maximum(gmax,gamma)
         gmin = torch.minimum(gmin,gamma)
-        z = rhs1/gamma
-        rhs1 = rhs2-delta*z
-        rhs2 = -epsln*z
-        Anorm = torch.sqrt(tnorm2)
-        ynorm = torch.linalg.norm(x,dim=-2)
-        epsa = Anorm*eps
-        epsx = Anorm*ynorm*eps
-        epsr = Anorm*ynorm*rtol
-        diag = gbar
-        diag = torch.where(diag==0,epsa,diag)
-        qrnorm = phibar
-        rnorm = qrnorm
-        Acond = gmax/gmin
     if store_data_iters==0:
         return x 
     else:
@@ -919,19 +905,23 @@ if __name__=="__main__":
         torch.set_default_dtype(torch.float64)
     rng = torch.Generator(device=device).manual_seed(7)
 
-    # x = torch.rand((10,4,),generator=rng,device=device)
-    # theta_true = torch.rand((4,),generator=rng,device=device)
-    # ytrue = torch.exp((x*theta_true).sum(-1)) # (10,)
-    # def f(theta):
-    #     yhat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
-    #     return yhat
-    # theta,data = lm_opt(
-    #     f = f, 
-    #     theta0 = torch.rand_like(theta_true,generator=rng),
-    #     ytrue = ytrue,
-    #     iters = 3,
-    #     # jacfwd=False,
-    #     )
+    x = torch.rand((10,4,),generator=rng)
+    theta_true = torch.rand((4,),generator=rng)
+    ytrue = torch.exp((x*theta_true).sum(-1)) # (10,)
+    def f(theta):
+        yhat = torch.exp((x*theta[...,None,:]).sum(-1)) # (...,10)
+        return yhat
+    theta_hat,data = lm_opt(
+        f = f, 
+        theta0 = torch.rand_like(theta_true,generator=rng),
+        ytrue = ytrue,
+        iters = 50,
+        batch_dims = 0,
+        verbose = True,
+        verbose_times = False,
+        store_data_iters = None,
+        store_all_data = True,
+        )
     # print_data_signatures(data,show_device=True)
 
     # x = torch.rand((3,3,3,2,2),generator=rng,device=device)
@@ -952,21 +942,21 @@ if __name__=="__main__":
     #     )
     # print_data_signatures(data)
 
-    n = 100
-    k = 3
-    A_diag = torch.randn(2,1,4,n,generator=rng)
-    A_off_diag = torch.randn(2,1,4,n-1,generator=rng) 
-    A = torch.zeros(2,1,4,n,n)
-    A[...,torch.arange(n),torch.arange(n)] = A_diag 
-    A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
-    A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
-    B = torch.rand(2,6,1,n,k,generator=rng)
-    X_true = torch.linalg.solve(A,B)
-    torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
-    def A_mult(x):
-        y = x*A_diag[...,:,None]
-        y[...,1:,:] += x[...,:-1,:]*A_off_diag[...,:,None]
-        y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
-        return y
-    torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
-    X_minres = minres(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None)
+    # n = 100
+    # k = 3
+    # A_diag = torch.randn(2,1,4,n,generator=rng)
+    # A_off_diag = torch.randn(2,1,4,n-1,generator=rng) 
+    # A = torch.zeros(2,1,4,n,n)
+    # A[...,torch.arange(n),torch.arange(n)] = A_diag 
+    # A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
+    # A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
+    # B = torch.rand(2,6,1,n,k,generator=rng)
+    # X_true = torch.linalg.solve(A,B)
+    # torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
+    # def A_mult(x):
+    #     y = x*A_diag[...,:,None]
+    #     y[...,1:,:] += x[...,:-1,:]*A_off_diag[...,:,None]
+    #     y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
+    #     return y
+    # torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
+    # X_minres = minres(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None)
