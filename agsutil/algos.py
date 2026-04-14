@@ -483,6 +483,122 @@ def lm_opt(
         }
     return theta,data
 
+def minres(
+        a,
+        b,
+        x0 = None,
+        iters = None,
+        verbose = None, 
+        verbose_indent = 4,
+        quantiles_losses = [0,1,5,10,25,40,50,60,75,90,95,99,100],
+        verbose_quantiles_losses = [5,25,50,75,90],
+        verbose_times = True, 
+        warn = True,
+        return_data = False,
+        ):
+    r"""
+    [MINRES algorithm](https://en.wikipedia.org/wiki/Minimal_residual_method) for solving symmetric linear systems 
+
+    $$AX=B$$
+
+    Args:
+        a (Union[torch.Tensor,callable]): Symmetric matrix `A` with shape `(...,n,n)`, or  
+            `callable(A)` where `a(x)` should return the batch matrix multiplication of `A` and `x`,  
+        b (torch.Tensor): Right hand side tensor $B$ with shape `(...,n,k)`
+        x0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
+        iters (int): number of minres iterations, defaults to the matrix size `n`. 
+        verbose (int): Controls logging verbosity
+        
+            - If True, perform logging. 
+            - If a positive int, only log every verbose iterations. 
+            - If False, don't log. 
+        
+        verbose_indent (int): Positive number of indentation spaces for logging.
+        quantiles_losses (list): Loss quantiles to record.
+        verbose_quantiles_losses (list): Loss quantiles to show in verbose log.
+        verbose_times (bool): If `False`, do not show the times in the verbose log. This is mostly for testing where timing is not reproducible. 
+        warn (bool): If `False`, then suppress warnings.
+        return_data (bool): If `True`, return `(x,data)`, otherwise only return `x`
+    
+    Returns:
+        x (torch.Tensor): Optimized $X$.
+        data (dict): Iteration data, only returned when `return_data=True`
+
+    Examples:
+
+        >>> torch.set_default_dtype(torch.float64)
+        >>> rng = torch.Generator().manual_seed(7)
+        >>> n = 5
+        >>> A = torch.randn(n,n,generator=rng)
+        >>> A = (A+A.T)/2
+        >>> b = torch.rand(n,generator=rng)
+        >>> x_true = torch.linalg.solve(A,b[...,None])[...,0]
+        >>> x_true
+        tensor([-0.1402,  0.4565,  0.2920,  0.2470,  0.3251])
+        >>> r_true = A@x_true-b
+        >>> torch.allclose(A@x_true-b,torch.zeros_like(b))
+        True
+        >>> x_minres = minres(A,b[...,None])[...,0]
+        >>> torch.allclose(x_minres,x_true)
+        True
+    """
+    if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
+            torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
+                torch.set_default_dtype(torch.float64)'''%str(torch.get_default_dtype()))
+    device = str(b.device)
+    default_device = str(torch.get_default_device())
+    assert b.ndim>=2, "b should have shape (...,n,k)"
+    batch_shape = tuple(b.shape[:-2])
+    n = b.size(-2)
+    k = b.size(-1)
+    if x0 is None: 
+        x0 = torch.zeros_like(b)
+    if isinstance(a,torch.Tensor):
+        assert a.shape==(*batch_shape,n,n)
+        a_mult = lambda x: torch.einsum("...ij,...jk->...ik",a,x)
+    else:
+        assert callable(a)
+        a_mult = a
+    if iters is None: 
+        iters = n 
+    assert iters>=0
+    assert iters%1==0
+    assert isinstance(return_data,bool)
+    assert x0.shape==b.shape 
+    x = x0 
+    Ax = a_mult(x)
+    assert Ax.shape==b.shape 
+    r = b-Ax # (...,n,k)
+    p0 = r # (...,n,k)
+    s0 = a_mult(p0) # (...,n,k)
+    p1 = p0 # (...,n,k)
+    s1 = s0 # (...,n,k)
+    for i in range(iters+1):
+        p2 = p1 # (...,n,k)
+        p1 = p0 # (...,n,k)
+        s2 = s1 # (...,n,k)
+        s1 = s0 # (...,n,k)
+        alpha = torch.einsum("...ij,...ij->...j",r,s1)/torch.einsum("...ij,...ij->...j",s1,s1) # (...,k)
+        x = x+alpha[...,None,:]*p1 # (...,n,k)
+        r = r-alpha[...,None,:]*s1 # (...,n,k)
+        if i==iters: break 
+        p0 = s1 # (...,n,k)
+        s0 = a_mult(s1) # (...,n,k)
+        beta1 = torch.einsum("...ij,...ij->...j",s0,s1)/torch.einsum("...ij,...ij->...j",s1,s1) # (...,k)
+        p0 = p0-beta1[...,None,:]*p1 # (...,n,k)
+        s0 = s0-beta1[...,None,:]*s1 # (...,n,k)
+        if i>0:
+            beta2 = torch.einsum("...ij,...ij->...j",s0,s2)/torch.einsum("...ij,...ij->...j",s2,s2) # (...,k)
+            p0 = p0-beta2[...,None,:]*p2
+            s0 = s0-beta2[...,None,:]*s2
+    if not return_data:
+        return x 
+    else:
+        data = {
+            "x": x.to(default_device),
+            }
+        return x,data
+
 if __name__=="__main__":
     device = "cpu"
     if "mps" not in device:
@@ -504,20 +620,31 @@ if __name__=="__main__":
     #     )
     # print_data_signatures_lm_opt(data,show_device=True)
 
-    x = torch.rand((3,3,3,2,2),generator=rng,device=device)
-    theta_true = torch.rand((4,4,2,2),generator=rng,device=device)
-    ytrue = torch.exp((x*theta_true[...,None,None,None,:,:]).sum((-2,-1))) # (4,4,3,3,3)
-    def f(theta):
-        yhat = torch.exp((x*theta[...,None,None,None,:,:]).sum((-2,-1))) # (...,3,3,3)
-        return yhat
-    theta_hat,data = lm_opt(
-        f = f, 
-        theta0 = torch.rand_like(theta_true,generator=rng),
-        ytrue = ytrue,
-        iters = 20,
-        batch_dims = 2,
-        lam_factors = [torch.tensor([1/4,1/2,1,2,4])],
-        alpha_factors = [torch.tensor([2/3,1,3/2])],
-        verbose_times = False,
-        )
-    print_data_signatures_lm_opt(data)
+    # x = torch.rand((3,3,3,2,2),generator=rng,device=device)
+    # theta_true = torch.rand((4,4,2,2),generator=rng,device=device)
+    # ytrue = torch.exp((x*theta_true[...,None,None,None,:,:]).sum((-2,-1))) # (4,4,3,3,3)
+    # def f(theta):
+    #     yhat = torch.exp((x*theta[...,None,None,None,:,:]).sum((-2,-1))) # (...,3,3,3)
+    #     return yhat
+    # theta_hat,data = lm_opt(
+    #     f = f, 
+    #     theta0 = torch.rand_like(theta_true,generator=rng),
+    #     ytrue = ytrue,
+    #     iters = 20,
+    #     batch_dims = 2,
+    #     lam_factors = [torch.tensor([1/4,1/2,1,2,4])],
+    #     alpha_factors = [torch.tensor([2/3,1,3/2])],
+    #     verbose_times = False,
+    #     )
+    # print_data_signatures_lm_opt(data)
+
+    n = 5
+    A = torch.randn(n,n,generator=rng)
+    A = (A+A.T)/2
+    b = torch.rand(n,generator=rng)
+    x_true = torch.linalg.solve(A,b[...,None])[...,0]
+    print(x_true)
+    r_true = A@x_true-b
+    assert torch.allclose(A@x_true-b,torch.zeros_like(b))
+    x_minres = minres(A,b[...,None])[...,0]
+    assert torch.allclose(x_minres,x_true)
