@@ -413,7 +413,7 @@ def lm_opt(
         else:
             (Jfull,),(resid,yhat) = vjac_ftilde(theta,*f_kwargs_vec_vals)
         assert Jfull.shape==(R,*nonbatch_y_shape,*nonbatch_theta_shape)
-        thetas[i] = theta.to(default_device)
+        thetas[i] = theta.reshape(*batch_shape,*nonbatch_theta_shape).to(default_device)
         loss = (resid**2).flatten(start_dim=1).sum(-1)
         losses[i] = loss.reshape(batch_shape).to(default_device)
         lams[i] = lam.reshape(batch_shape).to(default_device)
@@ -501,12 +501,14 @@ def minres(
 
     $$AX=B$$
 
+    A translation of `[scipy.sparse.linalg.minres](https://github.com/scipy/scipy/blob/v1.17.0/scipy/sparse/linalg/_isolve/minres.py)`.
+
     Args:
         A (Union[torch.Tensor,callable]): Symmetric matrix `A` with shape `(...,n,n)`, or  
             `callable(A)` where `a(x)` should return the batch matrix multiplication of `A` and `X`,  
         B (torch.Tensor): Right hand side tensor $B$ with shape `(...,n,k)`
         X0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
-        iters (int): number of minres iterations, defaults to the matrix size `n`. 
+        iters (int): number of minres iterations, defaults to `5n`. 
         verbose (int): Controls logging verbosity
         
             - If True, perform logging. 
@@ -540,7 +542,16 @@ def minres(
         tensor([-0.1402,  0.4565,  0.2920,  0.2470,  0.3251])
         >>> torch.allclose(A@x_true-b,torch.zeros_like(b))
         True
-        >>> x_minres = minres(A,b[...,None])[...,0]
+        >>> x_minres = minres(A,b[...,None],verbose_times=False)[...,0]
+            iter i     | losses_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 1.2e+00   | 1.2e+00   | 1.2e+00   | 1.2e+00   | 1.2e+00   
+            1          | 4.7e-01   | 4.7e-01   | 4.7e-01   | 4.7e-01   | 4.7e-01   
+            2          | 5.5e-02   | 5.5e-02   | 5.5e-02   | 5.5e-02   | 5.5e-02   
+            3          | 4.3e-02   | 4.3e-02   | 4.3e-02   | 4.3e-02   | 4.3e-02   
+            4          | 6.6e-03   | 6.6e-03   | 6.6e-03   | 6.6e-03   | 6.6e-03   
+            5          | 3.6e-31   | 3.6e-31   | 3.6e-31   | 3.6e-31   | 3.6e-31   
         >>> torch.allclose(x_minres,x_true)
         True
 
@@ -560,7 +571,16 @@ def minres(
                 [ 1.3653,  1.5421,  1.0192]])
         >>> torch.allclose(A@X_true-B,torch.zeros_like(B))
         True
-        >>> X_minres = minres(A,B)
+        >>> X_minres = minres(A,B,verbose_times=False)
+            iter i     | losses_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 5.7e-01   | 9.8e-01   | 1.5e+00   | 1.6e+00   | 1.7e+00   
+            1          | 4.7e-01   | 8.0e-01   | 1.2e+00   | 1.5e+00   | 1.7e+00   
+            2          | 3.3e-01   | 5.2e-01   | 7.5e-01   | 7.7e-01   | 7.8e-01   
+            3          | 2.3e-01   | 2.8e-01   | 3.4e-01   | 3.8e-01   | 4.0e-01   
+            4          | 2.2e-01   | 2.6e-01   | 3.2e-01   | 3.3e-01   | 3.3e-01   
+            5          | 1.5e-29   | 4.8e-29   | 8.8e-29   | 1.0e-28   | 1.1e-28   
         >>> torch.allclose(X_minres,X_true)
         True
 
@@ -597,7 +617,16 @@ def minres(
         ...     return y
         >>> torch.allclose(A_mult(X_true),A@X_true)
         True
-        >>> X_minres = minres(A_mult,B)
+        >>> X_minres = minres(A_mult,B,verbose_times=False)
+            iter i     | losses_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 1.8e+00   | 2.1e+00   | 2.5e+00   | 2.7e+00   | 2.8e+00   
+            1          | 4.3e-01   | 8.8e-01   | 1.4e+00   | 1.6e+00   | 1.7e+00   
+            2          | 1.4e-01   | 2.2e-01   | 3.1e-01   | 4.6e-01   | 5.5e-01   
+            3          | 3.3e-02   | 8.4e-02   | 1.5e-01   | 2.1e-01   | 2.5e-01   
+            4          | 1.4e-02   | 6.8e-02   | 1.4e-01   | 1.7e-01   | 1.9e-01   
+            5          | 1.4e-28   | 1.6e-28   | 1.9e-28   | 2.2e-28   | 2.5e-28   
         >>> torch.allclose(X_minres,X_true)
         True
 
@@ -622,7 +651,16 @@ def minres(
         ...     return y
         >>> torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
         True
-        >>> X_minres = minres(A_mult,B)
+        >>> X_minres = minres(A_mult,B,verbose_times=False)
+            iter i     | losses_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 7.7e-01   | 1.2e+00   | 1.5e+00   | 2.2e+00   | 2.7e+00   
+            1          | 1.8e-01   | 5.9e-01   | 1.3e+00   | 1.6e+00   | 2.5e+00   
+            2          | 5.8e-02   | 2.0e-01   | 3.4e-01   | 5.9e-01   | 1.1e+00   
+            3          | 1.9e-02   | 7.3e-02   | 1.7e-01   | 2.5e-01   | 5.4e-01   
+            4          | 3.8e-04   | 8.6e-03   | 4.5e-02   | 1.1e-01   | 2.5e-01   
+            5          | 1.6e-31   | 4.2e-31   | 2.7e-30   | 9.3e-30   | 5.9e-28   
         >>> X_minres.shape
         torch.Size([2, 4, 5, 3])
         >>> torch.allclose(X_minres,X_true)
@@ -642,12 +680,12 @@ def minres(
     if isinstance(A,torch.Tensor):
         assert A.shape==(*batch_shape,n,n)
         assert torch.allclose(A.transpose(dim0=-2,dim1=-1),A)
-        A_mult = lambda X: torch.einsum("...ij,...jk->...ik",A,X)
+        matvec = lambda X: torch.einsum("...ij,...jk->...ik",A,X)
     else:
         assert callable(A)
-        A_mult = A
+        matvec = A
     if iters is None: 
-        iters = n 
+        iters = 5*n 
     assert X0.shape==B.shape 
     assert isinstance(return_data,bool)
     assert iters>=0
@@ -679,43 +717,120 @@ def minres(
         print(" "*verbose_indent+"~"*len(_s))
     timer = Timer(device=device)
     timer.tic()
+    psolve = lambda X: X # TODO: implement more involved preconditioned solver
+    inner = lambda a,b: torch.einsum("...ij,...ij->...j",a,b)
+    msg = [
+        ' beta2 = 0.  If M = I, b and x are eigenvectors    ',    # -1
+        ' beta1 = 0.  The exact solution is x0          ',       # 0
+        ' A solution to Ax = b was found, given rtol        ',   # 1
+        ' A least-squares solution was found, given rtol    ',   # 2
+        ' Reasonable accuracy achieved, given eps           ',   # 3
+        ' x has converged to an eigenvector                 ',   # 4
+        ' acond has exceeded 0.1/eps                        ',   # 5
+        ' The iteration limit was reached                   ',   # 6
+        ' A  does not define a symmetric matrix             ',   # 7
+        ' M  does not define a symmetric matrix             ',   # 8
+        ' M  does not define a pos-def preconditioner       ',   # 9
+        ]
+    istop = 0
+    Anorm = 0
+    Acond = 0
+    rnorm = 0
+    ynorm = 0
+    eps = torch.finfo(B.dtype).eps
     x = X0 
-    Ax = A_mult(x)
+    Ax = matvec(x)
     assert Ax.shape==B.shape 
-    r = B-Ax # (...,n,k)
-    p0 = r # (...,n,k)
-    s0 = A_mult(p0) # (...,n,k)
-    p1 = p0 # (...,n,k)
-    s1 = s0 # (...,n,k)
+    r1 = B-Ax # (...,n,k)
+    y = psolve(r1) # (...,n,k)
+    beta1 = inner(r1,y) # (...,k)
+    if (beta1<0).any():
+        raise ValueError('indefinite preconditioner')
+    bnorm = torch.linalg.norm(B,dim=-2) # (...,k)
+    beta1 = torch.sqrt(beta1)
+    oldb = 0
+    beta = beta1
+    dbar = 0
+    epsln = torch.zeros(1)
+    qrnorm = beta1
+    phibar = beta1
+    rhs1 = beta1
+    rhs2 = 0
+    tnorm2 = 0
+    gmax = torch.zeros(1)
+    gmin = torch.finfo(B.dtype).max*torch.ones(1)
+    cs = -1
+    sn = 0
+    w = torch.zeros_like(B)
+    w2 = torch.zeros_like(B)
+    r2 = r1
+    shift = 0 # TODO: If shift != 0 then the method solves (A - shift*I)x = b
+    rtol = 1e-5 # TODO: 
+    residtol = 1e-8 # TODO: 
     for i in range(iters+1):
-        p2 = p1 # (...,n,k)
-        p1 = p0 # (...,n,k)
-        s2 = s1 # (...,n,k)
-        s1 = s0 # (...,n,k)
-        alpha = torch.einsum("...ij,...ij->...j",r,s1)/torch.einsum("...ij,...ij->...j",s1,s1) # (...,k)
-        x = x+alpha[...,None,:]*p1 # (...,n,k)
-        r = r-alpha[...,None,:]*s1 # (...,n,k)
-        xs[i] = x.to(default_device)
+        r = matvec(x)-B 
         loss = (r**2).sum(-2)
         losses[i] = loss.to(default_device)
         for qt in quantiles_losses:
             losses_quantiles[str(qt)][i] = loss.nanquantile(qt/100).to(default_device)
         times[i] = timer.toc()
-        if verbose and (i%verbose==0 or i==iters):
+        breakcond = i==iters or r.abs().amax()<=residtol
+        if verbose and (i%verbose==0 or breakcond):
             _s_iter = "%-10d "%i
             _s_losses_qt = ("| %-9.1e "*len(verbose_quantiles_losses))%tuple(losses_quantiles[str(qt)][i] for qt in verbose_quantiles_losses)
             _s_times = "| %-10.1f "%(times[i]) if verbose_times else ""
             print(" "*verbose_indent+_s_iter+_s_losses_qt+_s_times)
-        if i==iters: break 
-        p0 = s1 # (...,n,k)
-        s0 = A_mult(s1) # (...,n,k)
-        beta1 = torch.einsum("...ij,...ij->...j",s0,s1)/torch.einsum("...ij,...ij->...j",s1,s1) # (...,k)
-        p0 = p0-beta1[...,None,:]*p1 # (...,n,k)
-        s0 = s0-beta1[...,None,:]*s1 # (...,n,k)
+        if breakcond: break 
+        s = 1/beta
+        v = s[...,None,:]*y
+        y = matvec(v)
+        y = y-shift*v
         if i>0:
-            beta2 = torch.einsum("...ij,...ij->...j",s0,s2)/torch.einsum("...ij,...ij->...j",s2,s2) # (...,k)
-            p0 = p0-beta2[...,None,:]*p2
-            s0 = s0-beta2[...,None,:]*s2
+            y = y-(beta/oldb)[...,None,:]*r1
+        alfa = inner(v,y)
+        y = y-(alfa/beta)[...,None,:]*r2
+        r1 = r2
+        r2 = y
+        y = psolve(r2)
+        oldb = beta
+        beta = inner(r2,y)
+        if (beta<0).any():
+            raise ValueError('non-symmetric matrix')
+        beta = torch.sqrt(beta)
+        tnorm2 += alfa**2+oldb**2+beta**2
+        oldeps = epsln
+        delta = cs*dbar+sn*alfa
+        gbar = sn*dbar-cs*alfa
+        epsln = sn*beta
+        dbar = -cs*beta
+        root = torch.linalg.norm(torch.stack([gbar,dbar],dim=-1),dim=-1)
+        Arnorm = phibar*root
+        gamma = torch.linalg.norm(torch.stack([gbar,beta],dim=-1),dim=-1)
+        gamma = torch.maximum(gamma,eps*torch.ones(1))
+        cs = gbar/gamma
+        sn = beta/gamma
+        phi = cs*phibar
+        phibar = sn*phibar
+        denom = 1/gamma
+        w1 = w2
+        w2 = w
+        w = (v-oldeps[...,None,:]*w1-delta[...,None,:]*w2)*denom[...,None,:]
+        x = x+phi[...,None,:]*w
+        gmax = torch.maximum(gmax, gamma)
+        gmin = torch.minimum(gmin, gamma)
+        z = rhs1/gamma
+        rhs1 = rhs2-delta*z
+        rhs2 = -epsln*z
+        Anorm = torch.sqrt(tnorm2)
+        ynorm = torch.linalg.norm(x,dim=-2)
+        epsa = Anorm*eps
+        epsx = Anorm*ynorm*eps
+        epsr = Anorm*ynorm*rtol
+        diag = gbar
+        diag = torch.where(diag==0,epsa,diag)
+        qrnorm = phibar
+        rnorm = qrnorm
+        Acond = gmax/gmin
     if not return_data:
         return x 
     else:
@@ -779,12 +894,23 @@ if __name__=="__main__":
         y = x*A_diag[...,:,None]
         y[...,1:,:] += x[...,:-1,:]*A_off_diag[...,:,None]
         y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
-        return y[1,1,:,[0]]
+        return y
     torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
+    X_minres = minres(A_mult,B,iters=1000)
+    print(X_minres)
+
+    # def A_mult(x):
+    #     y = x*A_diag[...,:,None]
+    #     y[...,1:,:] += x[...,:-1,:]*A_off_diag[...,:,None]
+    #     y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
+    #     return y[1,1,:,[0]]
     # X_minres = minres(A_mult,B[1,1,:,[0]],iters=1000)
-    import scipy.sparse
-    x,info = scipy.sparse.linalg.minres(A[1,1,:,:].numpy(),B[1,1,:,0].numpy(),rtol=1e-16)
-    print(x.shape)
-    r = A[1,1,:,:].numpy()@x-B[1,1,:,0].numpy()
-    print((r**2).sum())
-    print(info)
+    
+    
+    
+    # import scipy.sparse
+    # x,info = scipy.sparse.linalg.minres(A[1,1,:,:].numpy(),B[1,1,:,0].numpy(),rtol=1e-16)
+    # print(x.shape)
+    # r = A[1,1,:,:].numpy()@x-B[1,1,:,0].numpy()
+    # print((r**2).sum())
+    # print(info)
