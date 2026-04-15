@@ -1068,8 +1068,8 @@ def minres_qlp_cs(
         >>> b = torch.rand(n,dtype=torch.complex128,generator=rng)
         >>> x_true = torch.linalg.solve(A,b[...,None])[...,0]
         >>> x_true
-        tensor([ 0.2207+0.2879j,  0.0928-0.0057j,  0.2681+1.3488j, -1.2520-0.4214j,
-                -0.8860-0.6922j])
+        tensor([-0.6207-0.4121j,  0.5221+0.3249j, -1.0952+0.8594j,  0.9080-1.2110j,
+                -0.9799+0.7372j])
         >>> torch.allclose(A@x_true-b,torch.zeros_like(b))
         True
         >>> x_minres = minres_qlp_cs(A,b[...,None],verbose=None,verbose_times=False)[...,0]
@@ -1077,11 +1077,11 @@ def minres_qlp_cs(
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
-            1          | 8.7e-01   | 8.7e-01   | 8.7e-01   | 8.7e-01   | 8.7e-01   
-            2          | 5.4e-01   | 5.4e-01   | 5.4e-01   | 5.4e-01   | 5.4e-01   
-            3          | 5.4e-01   | 5.4e-01   | 5.4e-01   | 5.4e-01   | 5.4e-01   
-            4          | 2.6e-01   | 2.6e-01   | 2.6e-01   | 2.6e-01   | 2.6e-01   
-            5          | 3.0e-15   | 3.0e-15   | 3.0e-15   | 3.0e-15   | 3.0e-15   
+            1          | 9.6e-01   | 9.6e-01   | 9.6e-01   | 9.6e-01   | 9.6e-01   
+            2          | 5.8e-01   | 5.8e-01   | 5.8e-01   | 5.8e-01   | 5.8e-01   
+            3          | 4.5e-01   | 4.5e-01   | 4.5e-01   | 4.5e-01   | 4.5e-01   
+            4          | 2.8e-01   | 2.8e-01   | 2.8e-01   | 2.8e-01   | 2.8e-01   
+            5          | 1.7e-14   | 1.7e-14   | 1.7e-14   | 1.7e-14   | 1.7e-14   
         >>> torch.allclose(x_minres,x_true)
         True
 
@@ -1094,11 +1094,11 @@ def minres_qlp_cs(
         >>> B = torch.rand(n,k,dtype=torch.complex128,generator=rng)
         >>> X_true = torch.linalg.solve(A,B)
         >>> X_true
-        tensor([[ 0.8801, -0.0116,  0.4805],
-                [-1.1095, -1.6166, -0.7103],
-                [-2.9918, -1.9201, -3.5855],
-                [-4.1777, -3.6586, -5.1658],
-                [ 1.5417,  0.9814,  1.3790]])
+        tensor([[ 0.0142+0.7190j,  0.0097+0.9734j, -0.3620+0.6413j],
+                [ 0.4527+0.7455j,  0.4270+0.4941j,  0.9255+0.5685j],
+                [-0.7182-1.0284j,  0.3193-0.4463j, -0.3421-0.8780j],
+                [-0.5973+0.4910j, -0.8147+0.8256j, -0.8821+0.7147j],
+                [-0.0926+0.5500j, -0.5192+0.2817j, -0.8496+0.6976j]])
         >>> torch.allclose(A@X_true-B,torch.zeros_like(B))
         True
         >>> X_minres = minres_qlp_cs(A,B,verbose=None,verbose_times=False)
@@ -1106,11 +1106,11 @@ def minres_qlp_cs(
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
-            1          | 6.6e-01   | 7.5e-01   | 8.7e-01   | 8.8e-01   | 8.9e-01   
-            2          | 6.2e-01   | 6.4e-01   | 6.6e-01   | 7.3e-01   | 7.6e-01   
-            3          | 3.5e-01   | 4.7e-01   | 6.1e-01   | 6.3e-01   | 6.4e-01   
-            4          | 1.5e-01   | 1.8e-01   | 2.2e-01   | 3.4e-01   | 4.1e-01   
-            5          | 7.0e-15   | 9.1e-15   | 1.2e-14   | 2.2e-14   | 2.8e-14   
+            1          | 9.0e-01   | 9.1e-01   | 9.2e-01   | 9.5e-01   | 9.7e-01   
+            2          | 2.2e-01   | 3.1e-01   | 4.3e-01   | 5.0e-01   | 5.5e-01   
+            3          | 2.0e-01   | 2.2e-01   | 2.3e-01   | 2.9e-01   | 3.3e-01   
+            4          | 3.4e-02   | 5.0e-02   | 7.1e-02   | 8.1e-02   | 8.7e-02   
+            5          | 1.9e-15   | 4.2e-15   | 7.0e-15   | 1.5e-14   | 2.0e-14   
         >>> torch.allclose(X_minres,X_true)
         True
 
@@ -1125,19 +1125,24 @@ def minres_qlp_cs(
         >>> A[torch.arange(n-1),torch.arange(1,n)] = A_off_diag
         >>> A[torch.arange(1,n),torch.arange(n-1)] = A_off_diag
         >>> A
-        tensor([[-0.2728, -0.1545,  0.0000,  0.0000,  0.0000],
-                [-0.1545, -0.0275, -0.0120,  0.0000,  0.0000],
-                [ 0.0000, -0.0120, -0.4436,  0.2802,  0.0000],
-                [ 0.0000,  0.0000,  0.2802, -0.7303,  0.9724],
-                [ 0.0000,  0.0000,  0.0000,  0.9724, -0.4180]])
-        >>> B = torch.rand(n,k,generator=rng)
+        tensor([[ 0.4070+0.4993j, -0.2956-0.1092j,  0.0000+0.0000j,  0.0000+0.0000j,
+                  0.0000+0.0000j],
+                [-0.2956-0.1092j, -0.2736+0.1860j, -0.0085+0.1981j,  0.0000+0.0000j,
+                  0.0000+0.0000j],
+                [ 0.0000+0.0000j, -0.0085+0.1981j,  0.4033-0.3862j,  0.6876-0.4107j,
+                  0.0000+0.0000j],
+                [ 0.0000+0.0000j,  0.0000+0.0000j,  0.6876-0.4107j, -0.1929-0.0194j,
+                 -1.6474-0.1709j],
+                [ 0.0000+0.0000j,  0.0000+0.0000j,  0.0000+0.0000j, -1.6474-0.1709j,
+                 -0.3137-0.5164j]])
+        >>> B = torch.rand(n,k,dtype=torch.complex128,generator=rng)
         >>> X_true = torch.linalg.solve(A,B)
         >>> X_true
-        tensor([[-5.5996, -3.1344, -6.0989],
-                [ 6.5450, -0.5211,  5.0505],
-                [-1.8303, -0.9818, -0.4647],
-                [ 0.5862,  0.9233,  1.2342],
-                [ 1.3614,  1.4523,  1.9166]])
+        tensor([[ 0.2279-1.2591j,  0.3328-1.2298j,  1.1104-0.7536j],
+                [-1.6990-3.1131j, -0.5462-3.6662j, -0.7046-1.2715j],
+                [-2.4450+1.8595j, -1.9689+0.7696j, -0.1357+0.0958j],
+                [ 0.3013-0.4177j, -0.1354-0.1244j, -0.4453+0.1903j],
+                [-0.7472+0.9540j, -0.9701+0.5492j, -0.4009-0.3686j]])
         >>> torch.allclose(A@X_true-B,torch.zeros_like(B))
         True
         >>> def A_mult(x):
@@ -1152,11 +1157,11 @@ def minres_qlp_cs(
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
-            1          | 7.5e-01   | 8.1e-01   | 8.8e-01   | 9.3e-01   | 9.6e-01   
-            2          | 4.5e-01   | 5.6e-01   | 7.1e-01   | 8.0e-01   | 8.5e-01   
-            3          | 1.5e-01   | 1.9e-01   | 2.4e-01   | 2.9e-01   | 3.2e-01   
-            4          | 5.7e-02   | 1.4e-01   | 2.4e-01   | 2.9e-01   | 3.2e-01   
-            5          | 4.0e-15   | 5.4e-15   | 7.1e-15   | 1.9e-14   | 2.6e-14   
+            1          | 8.2e-01   | 8.5e-01   | 8.8e-01   | 9.1e-01   | 9.3e-01   
+            2          | 5.4e-01   | 5.9e-01   | 6.6e-01   | 7.0e-01   | 7.3e-01   
+            3          | 2.7e-01   | 3.5e-01   | 4.4e-01   | 5.6e-01   | 6.3e-01   
+            4          | 1.1e-01   | 1.4e-01   | 1.9e-01   | 2.0e-01   | 2.1e-01   
+            5          | 2.5e-15   | 3.4e-15   | 4.6e-15   | 5.3e-15   | 5.8e-15   
         >>> torch.allclose(X_minres,X_true)
         True
 
@@ -1170,7 +1175,7 @@ def minres_qlp_cs(
         >>> A[...,torch.arange(n),torch.arange(n)] = A_diag 
         >>> A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
         >>> A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
-        >>> B = torch.rand(2,6,1,n,k,generator=rng)
+        >>> B = torch.rand(2,6,1,n,k,dtype=torch.complex128,generator=rng)
         >>> X_true = torch.linalg.solve(A,B)
         >>> torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
         True
@@ -1186,38 +1191,36 @@ def minres_qlp_cs(
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
-            25         | 1.8e-01   | 2.3e-01   | 2.6e-01   | 2.9e-01   | 3.2e-01   
-            50         | 9.4e-02   | 1.2e-01   | 1.5e-01   | 1.9e-01   | 2.1e-01   
-            75         | 3.3e-02   | 5.1e-02   | 8.2e-02   | 1.5e-01   | 1.8e-01   
-            100        | 7.8e-03   | 1.4e-02   | 3.8e-02   | 1.2e-01   | 1.5e-01   
-            125        | 9.5e-07   | 1.2e-04   | 5.6e-04   | 2.3e-02   | 5.1e-02   
-            150        | 1.2e-14   | 2.6e-14   | 1.7e-12   | 2.5e-10   | 3.1e-09   
-            175        | 2.2e-15   | 3.7e-15   | 1.4e-14   | 6.5e-14   | 1.6e-13   
-            176        | 2.2e-15   | 3.7e-15   | 1.3e-14   | 6.0e-14   | 1.4e-13   
+            25         | 9.9e-02   | 1.4e-01   | 1.8e-01   | 2.1e-01   | 2.4e-01   
+            50         | 1.5e-02   | 3.6e-02   | 5.2e-02   | 8.8e-02   | 1.1e-01   
+            75         | 1.2e-03   | 4.4e-03   | 9.9e-03   | 2.6e-02   | 5.1e-02   
+            100        | 1.4e-05   | 1.7e-04   | 5.5e-04   | 4.2e-03   | 9.8e-03   
+            125        | 2.0e-13   | 4.3e-11   | 3.0e-10   | 4.2e-08   | 1.6e-06   
+            142        | 1.7e-15   | 2.3e-15   | 2.9e-15   | 6.6e-15   | 5.4e-14   
         >>> X_minres.shape
         torch.Size([2, 6, 4, 100, 3])
         >>> torch.allclose(X_minres,X_true)
         True
         >>> print_data_signatures(data)
             data['x'].shape = (2, 6, 4, 100, 3)
-            data['iterrange'].shape = (177,)
-            data['times'].shape = (177,)
+            data['iterrange'].shape = (143,)
+            data['times'].shape = (143,)
             data['losses_quantiles']
-                data['losses_quantiles']['0'].shape = (177,)
-                data['losses_quantiles']['1'].shape = (177,)
-                data['losses_quantiles']['5'].shape = (177,)
-                data['losses_quantiles']['10'].shape = (177,)
-                data['losses_quantiles']['25'].shape = (177,)
-                data['losses_quantiles']['40'].shape = (177,)
-                data['losses_quantiles']['50'].shape = (177,)
-                data['losses_quantiles']['60'].shape = (177,)
-                data['losses_quantiles']['75'].shape = (177,)
-                data['losses_quantiles']['90'].shape = (177,)
-                data['losses_quantiles']['95'].shape = (177,)
-                data['losses_quantiles']['99'].shape = (177,)
-                data['losses_quantiles']['100'].shape = (177,)
-            data['xs'].shape = (177, 2, 6, 4, 100, 3)
-            data['losses'].shape = (177, 2, 6, 4, 3)
+                data['losses_quantiles']['0'].shape = (143,)
+                data['losses_quantiles']['1'].shape = (143,)
+                data['losses_quantiles']['5'].shape = (143,)
+                data['losses_quantiles']['10'].shape = (143,)
+                data['losses_quantiles']['25'].shape = (143,)
+                data['losses_quantiles']['40'].shape = (143,)
+                data['losses_quantiles']['50'].shape = (143,)
+                data['losses_quantiles']['60'].shape = (143,)
+                data['losses_quantiles']['75'].shape = (143,)
+                data['losses_quantiles']['90'].shape = (143,)
+                data['losses_quantiles']['95'].shape = (143,)
+                data['losses_quantiles']['99'].shape = (143,)
+                data['losses_quantiles']['100'].shape = (143,)
+            data['xs'].shape = (143, 2, 6, 4, 100, 3)
+            data['losses'].shape = (143, 2, 6, 4, 3)
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
