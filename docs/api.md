@@ -7,3 +7,7 @@
 ## `matplotlib` plotting utils
 
 ::: agsutil.plots
+
+## other utils
+
+::: agsutil.utils

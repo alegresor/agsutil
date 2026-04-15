@@ -1,59 +1,14 @@
 import torch 
 import numpy as np
 import warnings 
-import time
-
-class Timer():
-    def __init__(self, device):
-        device_str = str(device) 
-        if "cpu" in device_str:
-            self.torch_backend = torch.cpu 
-        elif "cuda" in device_str:
-            self.torch_backend = torch.cuda 
-        elif "mps" in device_str:
-            self.torch_backend = torch.mps 
-        else:
-            raise Exception("undetected device = %s, should have 'cpu', 'cuda', or 'mps' in it."%device_str)
-    def tic(self):
-        if self.torch_backend==torch.cpu:
-            self.t0 = time.perf_counter()
-        else:
-            self.torch_backend.empty_cache()
-            self.t0 = self.torch_backend.Event(enable_timing=True)
-            self.tend = self.torch_backend.Event(enable_timing=True)
-            self.t0.record()
-    def toc(self):
-        if self.torch_backend==torch.cpu:
-            tdelta = time.perf_counter()-self.t0
-        else:
-            self.tend.record()
-            self.torch_backend.synchronize()
-            tdelta = self.t0.elapsed_time(self.tend)/1000
-        return tdelta
-
-def print_data_signatures(data, show_device=False):
-    for key,val in data.items():
-        if isinstance(val,torch.Tensor):
-            _s = "    data['%s'].shape = %s"%(key,str(tuple(data[key].shape)))
-            if show_device:
-                _s += " on device = %s"%str(data[key].device)
-            print(_s)
-        elif isinstance(val,dict):
-            print("    data['%s']"%key)
-            for kkey,vval in val.items():
-                _s = "        data['%s']['%s'].shape = %s"%(key,kkey,str(tuple(data[key][kkey].shape)))
-                if show_device:
-                    _s += " on device = %s"%str(data[key][kkey].device)
-                print(_s)
-        else:
-            print("    data['%s'] = %s"%(key,str(data[key])))
+from .utils import Timer,print_data_signatures
 
 def lm_opt(
         f,
         theta0,
         ytrue,
         iters = 10,
-        residtol = 1e-12,
+        residtol = None,
         batch_dims = 0, 
         f_kwargs_vec = {},
         f_kwargs_no_vec = {},
@@ -84,7 +39,7 @@ def lm_opt(
         theta0 (torch.Tensor): Initial guess for parameters $\theta$. 
         ytrue (torch.Tensor): True `y` values, i.e. `f(theta_true)`. 
         iters (int): Number of iterations. 
-        residtol (float): Non-negative tolerance on the maximum residual for early stopping.
+        residtol (float): Non-negative tolerance on the maximum residual for early stopping, defaults to `1e-12` for `torch.float64` and `2.5e-4` for `torch.float32`.
         batch_dims (int): Number of batch dimension. 
         f_kwargs_vec (dict): Keyword arguments to `f` which will be vectorized over the first dimension. 
         f_kwargs_no_vec (dict): Keyword arguments to `f` which will not be vectorized over the first dimension. 
@@ -111,7 +66,7 @@ def lm_opt(
             - If `None`, set to a reasonable positive int based on the maximum number of iterations
             - If `False`, don't log. 
         
-        verbose_indent (int): Positive number of indentation spaces for logging.
+        verbose_indent (int): Non-negative number of indentation spaces for logging.
         quantiles_losses (list): Loss quantiles to record.
         quantiles_lams (list): $\lambda$ quantiles to record.
         quantiles_alphas (list): $\alpha$ quantiles to record.
@@ -301,6 +256,8 @@ def lm_opt(
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
                 torch.set_default_dtype(torch.float64)'''%str(torch.get_default_dtype()))
+    assert torch.get_default_dtype() in [torch.float32,torch.float64]
+    default_dtype = torch.get_default_dtype()
     device = str(theta0.device)
     default_device = str(torch.get_default_device())
     assert iters%1==0, "iters should be an int"
@@ -345,6 +302,13 @@ def lm_opt(
     assert store_data_iters%1==0
     assert store_data_iters>=0 
     assert isinstance(store_all_data,bool)
+    if residtol is None: 
+        if default_dtype==torch.float64:
+            residtol = 1e-12
+        elif default_dtype==torch.float32:
+            residtol = 2.5e-4
+        else:
+            raise Exception("default_dtype = %s not parsed"%str(default_dtype))
     assert residtol>=0
     assert lam0>0
     assert alpha0>0
@@ -533,7 +497,7 @@ def minres(
         B,
         X0 = None,
         iters = None,
-        residtol = 1e-12,
+        residtol = None,
         verbose = False, 
         verbose_indent = 4,
         quantiles_losses = [0,1,5,10,25,40,50,60,75,90,95,99,100],
@@ -554,7 +518,7 @@ def minres(
         B (torch.Tensor): Right hand side tensor $B$ with shape `(...,n,k)`
         X0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
         iters (int): number of minres iterations, defaults to `5n`. 
-        residtol (float): Non-negative tolerance on the maximum residual for early stopping.
+        residtol (float): Non-negative tolerance on the maximum residual for early stopping, defaults to `1e-12` for `torch.float64` and `2.5e-4` for `torch.float32`.
         verbose (int): Controls logging verbosity
 
             - If `True`, perform logging. 
@@ -562,7 +526,7 @@ def minres(
             - If `None`, set to a reasonable positive int based on the maximum number of iterations
             - If `False`, don't log. 
         
-        verbose_indent (int): Positive number of indentation spaces for logging.
+        verbose_indent (int): Non-negative number of indentation spaces for logging.
         quantiles_losses (list): Loss quantiles to record.
         verbose_quantiles_losses (list): Loss quantiles to show in verbose log.
         verbose_times (bool): If `False`, do not show the times in the verbose log. This is mostly for testing where timing is not reproducible. 
@@ -746,6 +710,8 @@ def minres(
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
                 torch.set_default_dtype(torch.float64)'''%str(torch.get_default_dtype()))
+    assert torch.get_default_dtype() in [torch.float32,torch.float64]
+    default_dtype = torch.get_default_dtype()
     device = str(B.device)
     default_device = str(torch.get_default_device())
     assert B.ndim>=2, "B should have shape (...,n,k)"
@@ -765,6 +731,13 @@ def minres(
     assert X0.shape==B.shape 
     assert iters>=0
     assert iters%1==0
+    if residtol is None: 
+        if default_dtype==torch.float64:
+            residtol = 1e-12
+        elif default_dtype==torch.float32:
+            residtol = 2.5e-4
+        else:
+            raise Exception("default_dtype = %s not parsed"%str(default_dtype))
     assert residtol>=0
     if verbose is None: 
         verbose = max(1,iters//20)
@@ -819,7 +792,7 @@ def minres(
     oldb = 0
     beta = beta1
     dbar = 0
-    epsln = torch.zeros(1)
+    epsln = torch.zeros(1,device=device)
     phibar = beta1
     tnorm2 = 0
     cs = -1
@@ -872,7 +845,7 @@ def minres(
         epsln = sn*beta
         dbar = -cs*beta
         gamma = torch.linalg.norm(torch.stack([gbar,beta],dim=-1),dim=-1)
-        gamma = torch.maximum(gamma,eps*torch.ones(1))
+        gamma = torch.maximum(gamma,eps*torch.ones(1,device=device))
         cs = gbar/gamma
         sn = beta/gamma
         phi = cs*phibar
@@ -897,7 +870,7 @@ def minres(
         return x,data
 
 if __name__=="__main__":
-    device = "cpu"
+    device = "mps"
     if "mps" not in device:
         torch.set_default_dtype(torch.float64)
     rng = torch.Generator(device=device).manual_seed(7)
@@ -919,7 +892,7 @@ if __name__=="__main__":
     #     store_data_iters = None,
     #     store_all_data = True,
     #     )
-    # print_data_signatures(data,show_device=True)
+    # print_data_signatures(data,print_devices=True)
 
     # x = torch.rand((3,3,3,2,2),generator=rng,device=device)
     # theta_true = torch.rand((4,4,2,2),generator=rng,device=device)
@@ -941,13 +914,13 @@ if __name__=="__main__":
 
     n = 100
     k = 3
-    A_diag = torch.randn(2,1,4,n,generator=rng)
-    A_off_diag = torch.randn(2,1,4,n-1,generator=rng) 
-    A = torch.zeros(2,1,4,n,n)
+    A_diag = torch.randn(2,1,4,n,generator=rng,device=device)
+    A_off_diag = torch.randn(2,1,4,n-1,generator=rng,device=device) 
+    A = torch.zeros(2,1,4,n,n,device=device)
     A[...,torch.arange(n),torch.arange(n)] = A_diag 
     A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
     A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
-    B = torch.rand(2,6,1,n,k,generator=rng)
+    B = torch.rand(2,6,1,n,k,generator=rng,device=device)
     X_true = torch.linalg.solve(A,B)
     torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
     def A_mult(x):
@@ -956,4 +929,4 @@ if __name__=="__main__":
         y[...,:-1,:] += x[...,1:,:]*A_off_diag[...,:,None]
         return y
     torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
-    X_minres = minres(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None)
+    X_minres = minres(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None,residtol=2.5e-4)
