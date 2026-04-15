@@ -1178,41 +1178,55 @@ def minres_qlp_cs(
         ...     return y
         >>> torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
         True
-        >>> X_minres,data = minres_qlp_cs(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None,store_all_data=True)
+        >>> X_minres,data = minres_qlp_cs(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None,store_all_data=True,iters=40)
             iter i     | losses_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
-            25         | 1.3e-01   | 1.5e-01   | 1.8e-01   | 2.0e-01   | 2.1e-01   
-            50         | 2.9e-02   | 4.1e-02   | 5.7e-02   | 9.7e-02   | 1.2e-01   
-            75         | 1.7e-03   | 6.6e-03   | 9.9e-03   | 3.3e-02   | 5.1e-02   
-            100        | 5.7e-05   | 1.5e-04   | 4.5e-04   | 7.5e-04   | 2.3e-03   
-            125        | 4.3e-15   | 8.0e-13   | 1.3e-11   | 6.3e-10   | 5.4e-09   
-            134        | 2.0e-15   | 2.9e-15   | 4.7e-15   | 1.3e-14   | 4.9e-14   
+            2          | 6.6e-01   | 6.8e-01   | 7.0e-01   | 7.2e-01   | 7.3e-01   
+            4          | 5.1e-01   | 5.4e-01   | 5.6e-01   | 5.8e-01   | 5.9e-01   
+            6          | 4.2e-01   | 4.5e-01   | 4.6e-01   | 4.9e-01   | 5.0e-01   
+            8          | 3.5e-01   | 3.8e-01   | 4.0e-01   | 4.2e-01   | 4.4e-01   
+            10         | 3.0e-01   | 3.3e-01   | 3.6e-01   | 3.8e-01   | 4.0e-01   
+            12         | 2.6e-01   | 2.9e-01   | 3.2e-01   | 3.4e-01   | 3.6e-01   
+            14         | 2.3e-01   | 2.6e-01   | 2.9e-01   | 3.1e-01   | 3.3e-01   
+            16         | 2.1e-01   | 2.3e-01   | 2.6e-01   | 2.8e-01   | 3.0e-01   
+            18         | 1.9e-01   | 2.1e-01   | 2.4e-01   | 2.6e-01   | 2.8e-01   
+            20         | 1.7e-01   | 1.9e-01   | 2.2e-01   | 2.3e-01   | 2.6e-01   
+            22         | 1.5e-01   | 1.7e-01   | 2.0e-01   | 2.2e-01   | 2.4e-01   
+            24         | 1.3e-01   | 1.6e-01   | 1.8e-01   | 2.0e-01   | 2.2e-01   
+            26         | 1.2e-01   | 1.4e-01   | 1.7e-01   | 1.9e-01   | 2.1e-01   
+            28         | 1.0e-01   | 1.3e-01   | 1.6e-01   | 1.8e-01   | 2.0e-01   
+            30         | 9.3e-02   | 1.2e-01   | 1.4e-01   | 1.7e-01   | 1.9e-01   
+            32         | 8.4e-02   | 1.1e-01   | 1.3e-01   | 1.6e-01   | 1.9e-01   
+            34         | 7.6e-02   | 1.0e-01   | 1.2e-01   | 1.6e-01   | 1.8e-01   
+            36         | 6.9e-02   | 9.3e-02   | 1.1e-01   | 1.5e-01   | 1.7e-01   
+            38         | 6.4e-02   | 8.5e-02   | 1.0e-01   | 1.4e-01   | 1.7e-01   
+            40         | 5.8e-02   | 7.5e-02   | 9.2e-02   | 1.4e-01   | 1.6e-01   
         >>> X_minres.shape
         torch.Size([2, 6, 4, 100, 3])
         >>> torch.allclose(X_minres,X_true)
-        True
+        False
         >>> print_data_signatures(data)
             data['x'].shape = (2, 6, 4, 100, 3)
-            data['iterrange'].shape = (135,)
-            data['times'].shape = (135,)
+            data['iterrange'].shape = (41,)
+            data['times'].shape = (41,)
             data['losses_quantiles']
-                data['losses_quantiles']['0'].shape = (135,)
-                data['losses_quantiles']['1'].shape = (135,)
-                data['losses_quantiles']['5'].shape = (135,)
-                data['losses_quantiles']['10'].shape = (135,)
-                data['losses_quantiles']['25'].shape = (135,)
-                data['losses_quantiles']['40'].shape = (135,)
-                data['losses_quantiles']['50'].shape = (135,)
-                data['losses_quantiles']['60'].shape = (135,)
-                data['losses_quantiles']['75'].shape = (135,)
-                data['losses_quantiles']['90'].shape = (135,)
-                data['losses_quantiles']['95'].shape = (135,)
-                data['losses_quantiles']['99'].shape = (135,)
-                data['losses_quantiles']['100'].shape = (135,)
-            data['xs'].shape = (135, 2, 6, 4, 100, 3)
-            data['losses'].shape = (135, 2, 6, 4, 3)
+                data['losses_quantiles']['0'].shape = (41,)
+                data['losses_quantiles']['1'].shape = (41,)
+                data['losses_quantiles']['5'].shape = (41,)
+                data['losses_quantiles']['10'].shape = (41,)
+                data['losses_quantiles']['25'].shape = (41,)
+                data['losses_quantiles']['40'].shape = (41,)
+                data['losses_quantiles']['50'].shape = (41,)
+                data['losses_quantiles']['60'].shape = (41,)
+                data['losses_quantiles']['75'].shape = (41,)
+                data['losses_quantiles']['90'].shape = (41,)
+                data['losses_quantiles']['95'].shape = (41,)
+                data['losses_quantiles']['99'].shape = (41,)
+                data['losses_quantiles']['100'].shape = (41,)
+            data['xs'].shape = (41, 2, 6, 4, 100, 3)
+            data['losses'].shape = (41, 2, 6, 4, 3)
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
