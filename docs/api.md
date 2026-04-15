@@ -4,6 +4,13 @@
 
 ::: agsutil.algos
 
+## Misc utils
+
+::: agsutil.utils
+
 ## `matplotlib` plotting utils
 
 ::: agsutil.plots
+
+
+
