@@ -1277,7 +1277,6 @@ def minres_qlp_cs(
     psolve = lambda X: X # TODO: implement more involved preconditioned solver
     inner = lambda a,b: torch.einsum("...ij,...ij->...j",a.conj(),b)
     Anorm = 0
-    eps = torch.finfo(B.dtype).eps
     x = X0 
     Ax = matvec(x)
     assert Ax.shape[-2:]==(n,k)
@@ -1296,48 +1295,36 @@ def minres_qlp_cs(
     bnorm = torch.linalg.norm(B,dim=-2) # (...,k)
     # TODO: Check if below variables are necessary    
     beta = torch.zeros_like(beta1)
-    tau = torch.tensor(0)
-    taul = torch.tensor(0)
+    tau = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    taul = torch.zeros((*batch_shape,k),dtype=B.dtype)
     phi = beta1
     betan = beta1
-    gmin = torch.tensor(0)
-    cs = torch.tensor(-1)
-    sn = torch.tensor(0)
-    cr1 = torch.tensor(1)
-    sr1 = torch.tensor(0)
-    cr2 = torch.tensor(-1)
-    sr2 = torch.tensor(0)
-    dltan = torch.tensor(0)
-    eplnn = torch.tensor([0])
+    cs = -torch.ones((*batch_shape,k),dtype=B.dtype)
+    sn = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    cr1 = torch.ones((*batch_shape,k),dtype=B.dtype)
+    sr1 = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    cr2 = -torch.ones((*batch_shape,k),dtype=B.dtype)
+    sr2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    dltan = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    eplnn = torch.zeros((*batch_shape,k),dtype=B.dtype)
     gama = torch.zeros((*batch_shape,k),dtype=B.dtype)
     gamal = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    gamal2 = torch.tensor(0)
-    eta = torch.tensor(0)
-    etal = torch.tensor(0)
-    etal2 = torch.tensor(0)
-    vepln = torch.tensor(0)
-    veplnl = torch.tensor(0)
-    veplnl2 = torch.tensor(0)
+    gamal2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    eta = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    etal = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    etal2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    vepln = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    veplnl = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    veplnl2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
     ul3 = torch.zeros((*batch_shape,k),dtype=B.dtype)
     ul2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
     ul = torch.zeros((*batch_shape,k),dtype=B.dtype)
     u = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    rnorm = betan
-    relres = rnorm / (beta1 + 1e-50)
-    relresl = torch.tensor(0)
-    relAresl = torch.tensor(0)
     w = torch.zeros_like(B)
     wl = torch.zeros_like(B)
     r1 = torch.zeros_like(B)
-    xl2 = torch.tensor(0)
-    alfa = torch.tensor(0)
-    gamal_QLP = torch.tensor(0)
-    vepln_QLP = torch.tensor(0)
-    gama_QLP = torch.tensor(0)
-    ul_QLP = torch.tensor(0)
-    u_QLP = torch.tensor(0)
-    eps = 2.220446049250313e-16
-    realmin = 2.2250738585072014e-308
+    xl2 = torch.zeros_like(B)
+    alfa = torch.zeros_like(B)
     shift = 0 # TODO: If shift != 0 then the method solves (A - shift*I)x = b
     for i in range(iters+1):
         resid = matvec(x)-B 
@@ -1410,8 +1397,8 @@ def minres_qlp_cs(
         u = (tau - eta*ul2 - vepln*ul) / gama
         if i==0:
             wl2 = wl
-            wl = v.conj()*sr1.conj()
-            w  = v.conj()*cr1
+            wl = v.conj()*sr1.conj()[...,None,:]
+            w  = v.conj()*cr1[...,None,:]
         elif i==1:
             wl2 = wl
             wl = w*cr1[...,None,:]+v.conj()*sr1.conj()[...,None,:]
