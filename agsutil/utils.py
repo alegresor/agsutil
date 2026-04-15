@@ -50,7 +50,7 @@ class Timer():
             tdelta = self.t0.elapsed_time(self.tend)/1000
         return float(tdelta)
 
-def print_data_signatures(data, print_devices=False, print_dtypes=False, verbose_indent=4):
+def print_data_signatures(data, name="data", print_devices=False, print_dtypes=False, verbose_indent=4):
     r""" 
     Print data shapes and (optionally) devices. 
 
@@ -67,6 +67,7 @@ def print_data_signatures(data, print_devices=False, print_dtypes=False, verbose
         ...     "subdata": {
         ...         "aa": torch.rand(2,3),
         ...         "bb": torch.rand(2,3),
+        ...         "subnontensor": ["ags",7,7,7],
         ...         },
         ...     "nontensor": [7,7,7,"ags"]
         ...     }
@@ -76,11 +77,12 @@ def print_data_signatures(data, print_devices=False, print_dtypes=False, verbose
         data['subdata']
             data['subdata']['aa'].shape = (2, 3) on device = cpu with dtype = torch.float64
             data['subdata']['bb'].shape = (2, 3) on device = cpu with dtype = torch.float64
-        data['nontensor'] = [7, 7, 7, 'ags']
+            data['subdata']['subnontensor'] a list of length 4
+        data['nontensor'] a list of length 4
     """ 
     for key,val in data.items():
         if isinstance(val,torch.Tensor):
-            _s = "data['%s'].shape = %s"%(key,str(tuple(data[key].shape)))
+            _s = "%s['%s'].shape = %s"%(name,key,str(tuple(data[key].shape)))
             if print_devices:
                 _s += " on device = %s"%str(data[key].device)
             if print_dtypes:
@@ -89,11 +91,18 @@ def print_data_signatures(data, print_devices=False, print_dtypes=False, verbose
         elif isinstance(val,dict):
             print(" "*verbose_indent+"data['%s']"%key)
             for kkey,vval in val.items():
-                _s = "data['%s']['%s'].shape = %s"%(key,kkey,str(tuple(data[key][kkey].shape)))
-                if print_devices:
-                    _s += " on device = %s"%str(data[key][kkey].device)
-                if print_dtypes:
-                    _s += " with dtype = %s"%str(data[key][kkey].dtype)
-                print(" "*(verbose_indent+4)+_s)
+                if isinstance(vval,torch.Tensor):
+                    _s = "%s['%s']['%s'].shape = %s"%(name,key,kkey,str(tuple(data[key][kkey].shape)))
+                    if print_devices:
+                        _s += " on device = %s"%str(data[key][kkey].device)
+                    if print_dtypes:
+                        _s += " with dtype = %s"%str(data[key][kkey].dtype)
+                    print(" "*(verbose_indent+4)+_s)
+                elif isinstance(vval,list):
+                    print(" "*(verbose_indent+4)+"%s['%s']['%s'] a list of length %d"%(name,key,kkey,len(data[key][kkey])))
+                else:
+                    print(" "*(verbose_indent+4)+"%s['%s']['%s'] = %s"%(name,key,kkey,str(data[key][kkey])))
+        elif isinstance(val,list):
+            print(" "*verbose_indent+"%s['%s'] a list of length %d"%(name,key,len(data[key])))
         else:
-            print(" "*verbose_indent+"data['%s'] = %s"%(key,str(data[key])))
+            print(" "*verbose_indent+"%s['%s'] = %s"%(name,key,str(data[key])))

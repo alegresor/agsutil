@@ -6,7 +6,7 @@ from .algos import (
     )
 from .plots import (
     mpl_setup,
-    set_aspects,
+    set_aspect,
     )
 from .utils import (
     Timer, 

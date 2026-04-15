@@ -7,11 +7,38 @@ def mpl_setup():
     Returns:
         mplparams (dict): matplotlib helpful parameters"""
     from matplotlib import pyplot 
+    import seaborn as sns
     pyplot.style.use("seaborn-v0_8-whitegrid")
+    sns.set_palette("colorblind") # Options: "deep", "muted", "pastel", "bright", "dark", "colorblind
+    COLORS = pyplot.rcParams['axes.prop_cycle'].by_key()['color']
     PW = 30 # page width in inches
-    FW = 30 # font size
-    COLORS = ["xkcd:purple","xkcd:blue","xkcd:green","xkcd:red","xkcd:orange","xkcd:cyan","xkcd:brown","xkcd:yellow"]
-    LINESTYLES = ['solid','dotted','dashed','dashdot',(0, (1, 1))]
+    FS = 30 # font size
+    LINESTYLES = [
+        'solid',
+        'dotted',
+        'dashdot',
+        'dashed',
+        (0, (3, 5, 1, 5, 1, 5)),
+        (5, (10, 3)),
+        (0, (1, 1)),
+        (0, (1, 10)),
+        (0, (1, 5)),
+        (0, (5, 5)),
+        ]
+    MARKERS = [
+        "o",
+        "s",
+        "D",
+        "P",
+        "^",
+        "v",
+        "<",
+        ">",
+        "$a$",
+        "$b$",
+        "$c$",
+        "$d$",
+        ]
     pyplot.rcParams['xtick.labelsize'] = FS
     pyplot.rcParams['ytick.labelsize'] = FS
     pyplot.rcParams['ytick.labelsize'] = FS
@@ -27,10 +54,11 @@ def mpl_setup():
         "FS": FS,
         "COLORS": COLORS,
         "LINESTYLES": LINESTYLES,
+        "MARKERS": MARKERS,
     }
     return mplparams
 
-def set_aspects(ax, ratio=1):
+def set_aspect(ax, ratio=1):
     r"""
     Set aspect ratio of the ax. 
 
