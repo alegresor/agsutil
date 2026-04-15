@@ -1295,31 +1295,31 @@ def minres_qlp_cs(
     bnorm = torch.linalg.norm(B,dim=-2) # (...,k)
     # TODO: Check if below variables are necessary    
     beta = torch.zeros_like(beta1)
-    tau = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    taul = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    tau = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    taul = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
     phi = beta1
     betan = beta1
-    cs = -torch.ones((*batch_shape,k),dtype=B.dtype)
-    sn = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    cr1 = torch.ones((*batch_shape,k),dtype=B.dtype)
-    sr1 = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    cr2 = -torch.ones((*batch_shape,k),dtype=B.dtype)
-    sr2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    dltan = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    eplnn = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    gama = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    gamal = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    gamal2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    eta = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    etal = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    etal2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    vepln = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    veplnl = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    veplnl2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    ul3 = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    ul2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    ul = torch.zeros((*batch_shape,k),dtype=B.dtype)
-    u = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    cs = -torch.ones((*batch_shape,k),dtype=B.dtype,device=device)
+    sn = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    cr1 = torch.ones((*batch_shape,k),dtype=B.dtype,device=device)
+    sr1 = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    cr2 = -torch.ones((*batch_shape,k),dtype=B.dtype,device=device)
+    sr2 = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    dltan = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    eplnn = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    gama = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    gamal = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    gamal2 = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    eta = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    etal = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    etal2 = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    vepln = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    veplnl = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    veplnl2 = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    ul3 = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    ul2 = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    ul = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
+    u = torch.zeros((*batch_shape,k),dtype=B.dtype,device=device)
     w = torch.zeros_like(B)
     wl = torch.zeros_like(B)
     r1 = torch.zeros_like(B)
@@ -1467,7 +1467,7 @@ def symOrtho(a, b):
     return (c,s,r)
 
 if __name__=="__main__":
-    device = "cpu"
+    device = "mps"
     if "mps" not in device:
         torch.set_default_dtype(torch.float64)
     rng = torch.Generator(device=device).manual_seed(7)
@@ -1535,15 +1535,16 @@ if __name__=="__main__":
     # x_minres = minres_qlp_cs(A,b[...,None],verbose=None,verbose_times=False)[...,0]
     # assert torch.allclose(x_minres,x_true)
 
+    dtype = torch.complex64 if torch.get_default_dtype()==torch.float32 else torch.complex128
     n = 100
     k = 3
-    A_diag = torch.randn(2,1,4,n,dtype=torch.complex128,generator=rng)
-    A_off_diag = torch.randn(2,1,4,n-1,dtype=torch.complex128,generator=rng) 
-    A = torch.zeros(2,1,4,n,n,dtype=torch.complex128)
+    A_diag = torch.randn(2,1,4,n,dtype=dtype,generator=rng,device=device)
+    A_off_diag = torch.randn(2,1,4,n-1,dtype=dtype,generator=rng,device=device) 
+    A = torch.zeros(2,1,4,n,n,dtype=dtype,device=device)
     A[...,torch.arange(n),torch.arange(n)] = A_diag 
     A[...,torch.arange(n-1),torch.arange(1,n)] = A_off_diag
     A[...,torch.arange(1,n),torch.arange(n-1)] = A_off_diag
-    B = torch.rand(2,6,1,n,k,dtype=torch.complex128,generator=rng)
+    B = torch.rand(2,6,1,n,k,dtype=dtype,generator=rng,device=device)
     X_true = torch.linalg.solve(A,B)
     torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
     def A_mult(x):
