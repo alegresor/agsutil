@@ -785,8 +785,6 @@ def minres(
     r1 = B-Ax # (...,n,k)
     y = psolve(r1) # (...,n,k)
     beta1 = inner(r1,y) # (...,k)
-    if (beta1<0).any():
-        raise ValueError('indefinite preconditioner')
     bnorm = torch.linalg.norm(B,dim=-2) # (...,k)
     beta1 = torch.sqrt(beta1)
     oldb = 0
@@ -835,8 +833,6 @@ def minres(
         y = psolve(r2)
         oldb = beta
         beta = inner(r2,y)
-        if (beta<0).any():
-            raise ValueError('non-symmetric matrix')
         beta = torch.sqrt(beta)
         tnorm2 += alfa**2+oldb**2+beta**2
         oldeps = epsln

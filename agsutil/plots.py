@@ -55,7 +55,7 @@ def mpl_setup():
         "COLORS": COLORS,
         "LINESTYLES": LINESTYLES,
         "MARKERS": MARKERS,
-    }
+        }
     return mplparams
 
 def set_aspect(ax, ratio=1):
