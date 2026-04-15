@@ -7,9 +7,11 @@ def lm_opt(
         f,
         theta0,
         ytrue,
+        batch_dims = 0, 
         iters = 10,
         residtol = None,
-        batch_dims = 0, 
+        minimize = True,
+        loss_shift = 0,
         f_kwargs_vec = {},
         f_kwargs_no_vec = {},
         lam0 = 1e-6,
@@ -38,9 +40,11 @@ def lm_opt(
         f (func): Residual function. 
         theta0 (torch.Tensor): Initial guess for parameters $\theta$. 
         ytrue (torch.Tensor): True `y` values, i.e. `f(theta_true)`. 
+        batch_dims (int): Number of batch dimension. 
         iters (int): Number of iterations. 
         residtol (float): Non-negative tolerance on the maximum residual for early stopping, defaults to `1e-12` for `torch.float64` and `2.5e-4` for `torch.float32`.
-        batch_dims (int): Number of batch dimension. 
+        minimize (bool): If `True`, minimize the objective, otherwise maximize the objective. 
+        loss_shift (bool): Scalar amount by which to shift the loss. 
         f_kwargs_vec (dict): Keyword arguments to `f` which will be vectorized over the first dimension. 
         f_kwargs_no_vec (dict): Keyword arguments to `f` which will not be vectorized over the first dimension. 
         lam0 (float): Initial positive relaxation parameter $\lambda$.
@@ -302,6 +306,9 @@ def lm_opt(
     assert store_data_iters%1==0
     assert store_data_iters>=0 
     assert isinstance(store_all_data,bool)
+    assert isinstance(minimize,bool)
+    signminimize = 1 if minimize else -1
+    loss_shift = float(loss_shift)
     if residtol is None: 
         if default_dtype==torch.float64:
             residtol = 1e-12
@@ -411,7 +418,7 @@ def lm_opt(
             (Jfull,),(resid,yhat) = vjac_ftilde(theta,*f_kwargs_vec_vals)
         assert Jfull.shape==(R,*nonbatch_y_shape,*nonbatch_theta_shape)
         breakcond = i==iters or resid.abs().amax()<=residtol
-        loss = (resid**2).flatten(start_dim=1).sum(-1)
+        loss = signminimize*(resid**2).flatten(start_dim=1).sum(-1)+loss_shift
         times_i = timer.toc()
         losses_quantiles_i = {str(qt): loss.nanquantile(qt/100) for qt in quantiles_losses}
         lams_quantiles_i = {str(qt): lam.nanquantile(qt/100) for qt in quantiles_lams}
@@ -456,19 +463,19 @@ def lm_opt(
         deltaf[success] = torch.linalg.solve_triangular(L[success].transpose(dim0=-2,dim1=-1),torch.linalg.solve_triangular(L[success],gammas[success,...,None],upper=False),upper=True)[...,0] # (Q_lam,R,T)
         thetasf = torch.ones((Q_lams,1,1),device=device)*theta.reshape((1,R,T)) # (Q_lam,R,T)
         thetasf_new = torch.nan*torch.ones((Q_alphas,Q_lams,R,T),device=device)
-        thetasf_new[:,success] = thetasf[success]-alpha_factors_i[:,None,None]*deltaf[success]
+        thetasf_new[:,success] = thetasf[success]-signminimize*alpha_factors_i[:,None,None]*deltaf[success]
         thetas_new = thetasf_new.reshape((Q_alphas,Q_lams,R,*nonbatch_theta_shape))
         f_kwargs_vec_vals_success = [(torch.ones((Q_alphas,Q_lams)+(1,)*f_kwargs_vec_vals[l].ndim,device=device)*f_kwargs_vec_vals[l][None,None,...])[:,success] for l in range(len(f_kwargs_vec_vals))]
         residf_new = torch.inf*torch.ones((Q_alphas,Q_lams,R,K),device=device)
         _,(resid_new_success,_) = f_resid(thetas_new[:,success],*f_kwargs_vec_vals_success)
         residf_new[:,success] = resid_new_success.reshape((Q_alphas,resid_new_success.size(1),K))
-        losses_new = (residf_new**2).sum(-1)
-        imin = losses_new.reshape((Q_alphas*Q_lams,R)).argmin(0) # (R,)
-        imin_alpha,imin_lam = imin//Q_lams,imin%Q_lams
-        lam_best_new = lams_try[imin_lam,Rrange] # (R,)
-        alpha_best_new = alphas_try[imin_alpha,Rrange] # (R,)
-        loss_best_new = losses_new[imin_alpha,imin_lam,Rrange] # (R,)
-        thetas_best_new = thetas_new[imin_alpha,imin_lam,Rrange] # (R,*nonbatch_theta_shape)
+        losses_new = signminimize*(residf_new**2).sum(-1)
+        ibest = losses_new.reshape((Q_alphas*Q_lams,R)).argmin(0) # (R,)
+        ibest_alpha,ibest_lam = ibest//Q_lams,ibest%Q_lams
+        lam_best_new = lams_try[ibest_lam,Rrange] # (R,)
+        alpha_best_new = alphas_try[ibest_alpha,Rrange] # (R,)
+        loss_best_new = losses_new[ibest_alpha,ibest_lam,Rrange] # (R,)
+        thetas_best_new = thetas_new[ibest_alpha,ibest_lam,Rrange] # (R,*nonbatch_theta_shape)
         improved = loss_best_new<loss # (R,)
         lam[improved] = lam_best_new[improved]
         alpha[improved] = alpha_best_new[improved]
