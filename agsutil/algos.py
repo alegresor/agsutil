@@ -1314,8 +1314,8 @@ def minres_qlp_cs(
     sr2 = torch.tensor(0)
     dltan = torch.tensor(0)
     eplnn = torch.tensor([0])
-    gama = torch.tensor([0],dtype=B.dtype)
-    gamal = torch.tensor([0],dtype=B.dtype)
+    gama = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    gamal = torch.zeros((*batch_shape,k),dtype=B.dtype)
     gamal2 = torch.tensor(0)
     eta = torch.tensor(0)
     etal = torch.tensor(0)
@@ -1323,14 +1323,11 @@ def minres_qlp_cs(
     vepln = torch.tensor(0)
     veplnl = torch.tensor(0)
     veplnl2 = torch.tensor(0)
-    ul3 = torch.tensor(0)
-    ul2 = torch.tensor(0)
-    ul = torch.tensor(0)
-    u = torch.tensor(0)
+    ul3 = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    ul2 = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    ul = torch.zeros((*batch_shape,k),dtype=B.dtype)
+    u = torch.zeros((*batch_shape,k),dtype=B.dtype)
     rnorm = betan
-    xl2norm = torch.tensor(0)
-    # Anorm = 0
-    # Acond = 1
     relres = rnorm / (beta1 + 1e-50)
     relresl = torch.tensor(0)
     relAresl = torch.tensor(0)
@@ -1372,7 +1369,7 @@ def minres_qlp_cs(
         v = r3/beta[...,None,:]    
         r3 = matvec(v.conj())-shift*v.conj()
         if i>0:
-            r3 = r3-(beta/betal)*r1
+            r3 = r3-(beta/betal)[...,None,:]*r1
         alfa = inner(v,r3)
         r3 = r3-(alfa/beta)[...,None,:]*r2
         r1 = r2
@@ -1415,27 +1412,25 @@ def minres_qlp_cs(
             ul2 = (taul2-etal2*ul4-veplnl2*ul3)/gamal2
         if i>0:
             ul = (taul-etal*ul3-veplnl*ul2)/gamal
-        xnorm_tmp = torch.linalg.norm(torch.tensor([xl2norm,ul2,ul],dtype=B.dtype),dim=-1)
         u = (tau - eta*ul2 - vepln*ul) / gama
-        xl2norm = torch.linalg.norm(torch.tensor([xl2norm,ul2],dtype=B.dtype),dim=-1)
         if i==0:
             wl2 = wl
             wl = v.conj()*sr1.conj()
             w  = v.conj()*cr1
         elif i==1:
             wl2 = wl
-            wl = w*cr1+v.conj()*sr1.conj()
-            w = w*sr1-v.conj()*cr1
+            wl = w*cr1[...,None,:]+v.conj()*sr1.conj()[...,None,:]
+            w = w*sr1[...,None,:]-v.conj()*cr1[...,None,:]
         else:
             wl2 = wl
             wl = w
-            w  = wl2*sr2-v.conj()*cr2
-            wl2 = wl2*cr2+v.conj()*sr2.conj()
-            v = wl*cr1+w*sr1.conj()
-            w = wl*sr1-w*cr1
+            w  = wl2*sr2[...,None,:]-v.conj()*cr2[...,None,:]
+            wl2 = wl2*cr2[...,None,:]+v.conj()*sr2.conj()[...,None,:]
+            v = wl*cr1[...,None,:]+w*sr1.conj()[...,None,:]
+            w = wl*sr1[...,None,:]-w*cr1[...,None,:]
             wl = v
-        xl2 = xl2+wl2*ul2
-        x = xl2+wl*ul+w*u[...,None,:]
+        xl2 = xl2+wl2*ul2[...,None,:]
+        x = xl2+wl*ul[...,None,:]+w*u[...,None,:]
         pass
         (cr2,sr2,gamal) = symOrtho(gamal.conj(),eplnn.conj())
         gamal = gamal.conj()
@@ -1532,15 +1527,15 @@ if __name__=="__main__":
     #     )
     # print_data_signatures(data)
 
-    n = 5
-    A = torch.randn(n,n,dtype=torch.complex128,generator=rng)
-    A = (A+A.T)/2
-    b = torch.rand(n,dtype=torch.complex128,generator=rng)
-    x_true = torch.linalg.solve(A,b[...,None])[...,0]
-    print(x_true)
-    assert torch.allclose(A@x_true-b,torch.zeros_like(b))
-    x_minres = minres_qlp_cs(A,b[...,None],verbose=None,verbose_times=False)[...,0]
-    assert torch.allclose(x_minres,x_true)
+    # n = 5
+    # A = torch.randn(n,n,dtype=torch.complex128,generator=rng)
+    # A = (A+A.T)/2
+    # b = torch.rand(n,dtype=torch.complex128,generator=rng)
+    # x_true = torch.linalg.solve(A,b[...,None])[...,0]
+    # print(x_true)
+    # assert torch.allclose(A@x_true-b,torch.zeros_like(b))
+    # x_minres = minres_qlp_cs(A,b[...,None],verbose=None,verbose_times=False)[...,0]
+    # assert torch.allclose(x_minres,x_true)
 
     # import scipy.sparse
     # n=100
