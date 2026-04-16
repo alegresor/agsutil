@@ -45,8 +45,8 @@ def lm_opt(
         iters (int): Number of iterations. 
         residtol (float): Non-negative tolerance on the maximum residual for early stopping, defaults to `1e-12` for `torch.float64` and `2.5e-4` for `torch.float32`.
         minimize (bool): If `True`, minimize the objective, otherwise maximize the objective. 
-        loss_mult (bool): Scalar amount by which to multiply the loss so `loss = loss_mult*torch.sum(v**2,dim=-1)+loss_shift`.
-        loss_shift (bool): Scalar amount by which to shift the loss so `loss = loss_mult*torch.sum(v**2,dim=-1)+loss_shift`.
+        loss_mult (bool): Scalar amount by which to multiply the loss so `loss = loss_mult*torch.sum(resid**2,dim=-1)+loss_shift`.
+        loss_shift (bool): Scalar amount by which to shift the loss so `loss = loss_mult*torch.sum(resid**2,dim=-1)+loss_shift`.
         f_kwargs_vec (dict): Keyword arguments to `f` which will be vectorized over the first dimension. 
         f_kwargs_no_vec (dict): Keyword arguments to `f` which will not be vectorized over the first dimension. 
         lam0 (float): Initial positive relaxation parameter $\lambda$.
