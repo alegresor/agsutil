@@ -373,9 +373,17 @@ def lm_opt(
         assert len(f_kwargs_vec_vals)==len(f_kwargs_vec_names)
         ytrue = f_kwargs_vec_vals[0]
         f_kwargs_vec = {f_kwargs_vec_names[i]:f_kwargs_vec_vals[i] for i in range(1,len(f_kwargs_vec_names))}
-        yhat = f(theta,**f_kwargs_vec,**f_kwargs_no_vec)
+        all_args = f(theta,**f_kwargs_vec,**f_kwargs_no_vec)
+        assert isinstance(all_args,tuple) or isinstance(all_args,torch.Tensor), "f must return a tuple or torch.Tensor"
+        if isinstance(all_args,torch.Tensor):
+            yhat = all_args
+            args = ()
+        else: #  isinstance(all_args,tuple)
+            assert all(isinstance(arg,torch.Tensor) for arg in all_args)
+            yhat = all_args[0]
+            args = all_args[1:]
         resid = yhat-ytrue
-        return resid,(resid,yhat)
+        return resid,(resid,yhat,*args)
     assert isinstance(jacfwd,bool)
     if jacfwd:
         jac_ftilde = torch.func.jacfwd(f_resid,argnums=(0,),has_aux=True)
@@ -416,9 +424,9 @@ def lm_opt(
     timer.tic()
     for i in range(iters+1):
         if i==iters:
-            _,(resid,yhat) = f_resid(theta,*f_kwargs_vec_vals)
+            _,(resid,yhat,*args) = f_resid(theta,*f_kwargs_vec_vals)
         else:
-            (Jfull,),(resid,yhat) = vjac_ftilde(theta,*f_kwargs_vec_vals)
+            (Jfull,),(resid,yhat,*args) = vjac_ftilde(theta,*f_kwargs_vec_vals)
         assert Jfull.shape==(R,*nonbatch_y_shape,*nonbatch_theta_shape)
         breakcond = i==iters or resid.abs().amax()<=residtol
         loss = loss_mult*(resid**2).flatten(start_dim=1).sum(-1)+loss_shift
@@ -470,7 +478,7 @@ def lm_opt(
         thetas_new = thetasf_new.reshape((Q_alphas,Q_lams,R,*nonbatch_theta_shape))
         f_kwargs_vec_vals_success = [(torch.ones((Q_alphas,Q_lams)+(1,)*f_kwargs_vec_vals[l].ndim,device=device)*f_kwargs_vec_vals[l][None,None,...])[:,success] for l in range(len(f_kwargs_vec_vals))]
         residf_new = torch.inf*torch.ones((Q_alphas,Q_lams,R,K),device=device)
-        _,(resid_new_success,_) = f_resid(thetas_new[:,success],*f_kwargs_vec_vals_success)
+        _,(resid_new_success,*_) = f_resid(thetas_new[:,success],*f_kwargs_vec_vals_success)
         residf_new[:,success] = resid_new_success.reshape((Q_alphas,resid_new_success.size(1),K))
         losses_new = signminimize*(residf_new**2).sum(-1)
         ibest = losses_new.reshape((Q_alphas*Q_lams,R)).argmin(0) # (R,)
@@ -484,8 +492,13 @@ def lm_opt(
         alpha[improved] = alpha_best_new[improved]
         theta[improved] = thetas_best_new[improved]
     theta = theta.reshape((*batch_shape,*nonbatch_theta_shape))
+    if batch_shape==():
+        args = [arg[0] for arg in args]
     if store_data_iters==0:
-        return theta 
+        if args==[]:
+            return theta
+        else:
+            return theta,*args
     else:
         data = {
             "theta": theta.to(default_device), 
@@ -500,7 +513,10 @@ def lm_opt(
             data["losses"] = torch.stack(losses,dim=0)
             data["lams"] = torch.stack(lams,dim=0)
             data["alphas"] = torch.stack(alphas,dim=0)
-        return theta,data
+        if args==[]:
+            return theta,data
+        else:
+            return theta,*args,data
 
 def minres(
         A,
