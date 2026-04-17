@@ -1485,9 +1485,9 @@ def transform_to_orthon_householder(theta):
     batch_shape = theta.shape[:-1]
     tril_indices = torch.tril_indices(n,n,device=theta.device)
     flat_indices = tril_indices[0]*n+tril_indices[1]
-    v_mat = torch.zeros((*theta.shape[:-1], n * n), device=theta.device, dtype=theta.dtype)
-    v_mat = v_mat.index_add(-1, flat_indices, theta)
-    v_mat = v_mat.view(*theta.shape[:-1], n, n)
+    v_mat = torch.zeros((*batch_shape,n*n),device=theta.device,dtype=theta.dtype)
+    v_mat = v_mat.index_add(-1,flat_indices,theta)
+    v_mat = v_mat.view(*batch_shape,n,n)
     diag = torch.diagonal(v_mat,dim1=-2,dim2=-1)
     diag_safe = torch.where(diag==0,torch.ones_like(diag),diag)
     v_mat_scaled = v_mat / diag_safe.unsqueeze(-2)
