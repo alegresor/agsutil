@@ -1450,16 +1450,23 @@ def transform_to_orthon_householder(theta):
                 [-0.4555-0.0455j,  0.7464-0.1175j,  0.3681+0.0320j, -0.0935+0.2724j],
                 [-0.4191-0.3096j,  0.1602-0.0255j, -0.4155-0.0479j,  0.5806-0.4361j],
                 [-0.4028-0.0603j, -0.1216+0.1071j, -0.4190-0.5838j, -0.5178+0.1528j]])
-        >>> Q@Q.conj().T
-        tensor([[ 1.0000e+00+0.0000e+00j, -1.8041e-16+0.0000e+00j,
-                  8.3267e-17+1.1102e-16j,  9.7145e-17-8.3267e-17j],
-                [-1.8041e-16+0.0000e+00j,  1.0000e+00+0.0000e+00j,
-                 -2.9143e-16+1.1102e-16j,  1.7694e-16+6.9389e-17j],
-                [ 8.3267e-17-1.1102e-16j, -2.9143e-16-1.1102e-16j,
-                  1.0000e+00+0.0000e+00j,  1.1796e-16-2.2204e-16j],
-                [ 9.7145e-17+8.3267e-17j,  1.7694e-16-6.9389e-17j,
-                  1.1796e-16+2.2204e-16j,  1.0000e+00+0.0000e+00j]])
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q.conj()),torch.eye(n,dtype=torch.complex128))
+        True
+
+    Two matrices
+        
+        >>> n = 3
+        >>> theta = torch.rand(2,n*(n+1)//2,generator=rng)
+        >>> Q = transform_to_orthon_householder(theta)
+        >>> Q 
+        tensor([[[ 0.9892,  0.0139, -0.1459],
+                 [-0.0366,  0.9873, -0.1545],
+                 [-0.1419, -0.1582, -0.9772]],
+        <BLANKLINE>
+                [[-0.6447,  0.7567, -0.1087],
+                 [-0.6473, -0.4648,  0.6041],
+                 [-0.4066, -0.4598, -0.7895]]])
+        >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q),torch.eye(n))
         True
 
     Batch support
@@ -1476,9 +1483,11 @@ def transform_to_orthon_householder(theta):
     """
     n = int((np.sqrt(1+8*theta.shape[-1])-1)/2)
     batch_shape = theta.shape[:-1]
-    v_mat = torch.zeros((*batch_shape,n,n),device=theta.device,dtype=theta.dtype)
     tril_indices = torch.tril_indices(n,n,device=theta.device)
-    v_mat[...,tril_indices[0],tril_indices[1]] = theta
+    flat_indices = tril_indices[0]*n+tril_indices[1]
+    v_mat = torch.zeros((*theta.shape[:-1], n * n), device=theta.device, dtype=theta.dtype)
+    v_mat = v_mat.index_add(-1, flat_indices, theta)
+    v_mat = v_mat.view(*theta.shape[:-1], n, n)
     diag = torch.diagonal(v_mat,dim1=-2,dim2=-1)
     diag_safe = torch.where(diag==0,torch.ones_like(diag),diag)
     v_mat_scaled = v_mat / diag_safe.unsqueeze(-2)
