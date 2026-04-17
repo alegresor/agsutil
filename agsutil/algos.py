@@ -1490,7 +1490,7 @@ def transform_to_orthon_householder(theta):
     v_mat = v_mat.view(*batch_shape,n,n)
     diag = torch.diagonal(v_mat,dim1=-2,dim2=-1)
     diag_safe = torch.where(diag==0,torch.ones_like(diag),diag)
-    v_mat_scaled = v_mat / diag_safe.unsqueeze(-2)
+    v_mat_scaled = v_mat/diag_safe.unsqueeze(-2)
     sum_sq_scaled = torch.sum(v_mat_scaled.abs()**2,dim=-2)
     tau = 2/sum_sq_scaled
     tau = torch.where(torch.isnan(tau)|torch.isinf(tau),torch.zeros_like(tau),tau)
