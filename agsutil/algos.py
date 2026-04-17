@@ -20,7 +20,7 @@ def lm_opt(
         lam_factors = [[1/2,1,2]],
         alpha_factors = [[1/2,1,2]],
         vmap_chunk_size = None,
-        jacfwd = True,
+        jacmode = "auto",
         verbose = False, 
         verbose_indent = 4,
         quantiles_losses = [0,1,5,10,25,40,50,60,75,90,95,99,100],
@@ -64,7 +64,12 @@ def lm_opt(
             - If a list of 1D `torch.Tensor`s are passed in for `alpha_factors`, iterations will cycle through the list and then return to the start after exhausting the list. 
         
         vmap_chunk_size (int): Parameter `chunksize` to pass to `torch.vmap`.
-        jacfwd (bool): If `True`, use `torch.func.jacfwd`, otherwise use `torch.func.jacrev`
+        jacmode (bool): Choose between `torch.func.jacfwd` and `torch.func.jacrev` using options:
+
+            - `"fwd"`: Use `torch.func.jacfwd`.
+            - `"rev"`: Use `torch.func.jacrev`.
+            - `"auto"`: Choose between `torch.func.jacfwd` and `torch.func.jacrev` depending on the size of the inputs and outputs. 
+
         verbose (int): Controls logging verbosity
         
             - If `True`, perform logging. 
@@ -384,24 +389,30 @@ def lm_opt(
             args = all_args[1:]
         resid = yhat-ytrue
         return resid,(resid,yhat,*args)
-    assert isinstance(jacfwd,bool)
-    if jacfwd:
-        jac_ftilde = torch.func.jacfwd(f_resid,argnums=(0,),has_aux=True)
-    else:
-        jac_ftilde = torch.func.jacrev(f_resid,argnums=(0,),has_aux=True)
+    assert jacmode in ["auto","fwd","rev"]
+    if jacmode=="auto":
+        if T<=K:
+            jacfunc = torch.func.jacfwd
+        else:
+            jacfunc = torch.func.jacrev
+    elif jacmode=="fwd":
+        jacfunc = torch.func.jacfwd
+        if warn and T>K: warnings.warn('''
+            For T the number of inputs and K the number of outputs:
+                torch.func.jacfwd performs best when T << K. 
+                torch.func.jacrev performs best when K << T.
+            You are using jacmode=='fwd' but T = %d > %d = K. 
+            Try using jacmode=='rev' by setting jacfwd = False.'''%(T,K))
+    elif jacmode=="rev":
+        jacfunc = torch.func.jacrev
+        if warn and T<K: warnings.warn('''
+            For T the number of inputs and K the number of outputs:
+                torch.func.jacfwd performs best when T << K. 
+                torch.func.jacrev performs best when K << T.
+            You are using jacmode=='rev' but T = %d < %d = K. 
+            Try using jacmode=='fwd' for better performance.'''%(T,K))
+    jac_ftilde = jacfunc(f_resid,argnums=(0,),has_aux=True)
     vjac_ftilde = torch.func.vmap(jac_ftilde,in_dims=(0,)+(0,)*len(f_kwargs_vec_names),chunk_size=vmap_chunk_size)
-    if warn and jacfwd and T>K: warnings.warn('''
-        For T the number of inputs and K the number of outputs:
-            torch.func.jacfwd performs best when T << K. 
-            torch.func.jacrev performs best when K << T.
-        You are using torch.func.jacfwd but T = %d > %d = K. 
-        Try using torch.func.jacrev by setting jacfwd = False.'''%(T,K))
-    if warn and (not jacfwd) and T<K: warnings.warn('''
-        For T the number of inputs and K the number of outputs:
-            torch.func.jacfwd performs best when T << K. 
-            torch.func.jacrev performs best when K << T.
-        You are using torch.func.jacrev but T = %d < %d = K. 
-        Try using torch.func.jacrev by setting jacfwd = True.'''%(T,K))
     eyeT = torch.eye(T,device=device)
     Rrange = torch.arange(R,device=device)
     lam = lam0*torch.ones(R,device=device)
