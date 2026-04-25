@@ -1409,13 +1409,13 @@ def symOrtho(a, b):
     r[cond2] = a[cond2]/c[cond2]
     return (c,s,r)
 
-def transform_to_orthon_householder(theta):
+def to_unitary(theta, n, complex_case=False):
     r"""
-    Transform a vector of $n (n+1)/2$ entries $\theta$ to $n \times n$ orthonormal matrices using Householder reflectors.  
-    The $\theta$ values specify the triangular matrix whose columns correspond to $u_i$ in the Householder reflector $I-\frac{2}{u_i^\dagger u_i} u_i u_i^\dagger$.
+    Transform to a unitary matrix.
     
     Args:
-        theta (torch.Tensor): With `theta.size(-1) == n*(n+1)//2`, parameterizing the triangular matrix of Householder reflector vectors. 
+        theta (torch.Tensor): With `theta.size(-1) == n*(n-1)//2` in the real case and `theta.size(-1) == n**2` in the complex case.
+        complex_case (bool): If `True`, parameterize a complex matrix, otherwise a real one. 
     
     Returns:
         Q (torch.Tensor): With shape `(*theta.shape[:-1],n,n)` orthonormal matrices
@@ -1427,84 +1427,161 @@ def transform_to_orthon_householder(theta):
     Single matrix
         
         >>> n = 5
-        >>> theta = torch.rand(n*(n+1)//2,generator=rng)
-        >>> Q = transform_to_orthon_householder(theta)
+        >>> theta = torch.rand(n*(n-1)//2,generator=rng)
+        >>> Q = to_unitary(theta,n)
         >>> Q 
-        tensor([[ 0.7687,  0.5278, -0.2589,  0.2377,  0.0829],
-                [-0.2266,  0.7397,  0.3099, -0.5485, -0.0686],
-                [-0.5436,  0.4088, -0.0775,  0.7132,  0.1510],
-                [-0.2440,  0.0512, -0.8809, -0.3522,  0.1947],
-                [-0.0522,  0.0672, -0.2346,  0.1001, -0.9632]])
+        tensor([[ 0.5027, -0.1038, -0.2508,  0.3769,  0.7291],
+                [-0.6870,  0.3679,  0.2777,  0.3454,  0.4430],
+                [-0.2330, -0.7975,  0.3425, -0.2999,  0.3201],
+                [-0.4638, -0.3141, -0.8037,  0.1779, -0.0934],
+                [-0.0769,  0.3453, -0.3111, -0.7855,  0.4013]])
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q),torch.eye(n))
         True
 
     Single complex matrix
         
         >>> n = 4
-        >>> theta = torch.rand(n*(n+1)//2,generator=rng,dtype=torch.complex128)
-        >>> Q = transform_to_orthon_householder(theta)
+        >>> theta = torch.rand(n**2,generator=rng)
+        >>> Q = to_unitary(theta,n,complex_case=True)
         >>> Q 
-        tensor([[ 0.5942+0.0000j,  0.5913-0.1638j, -0.3766-0.1742j, -0.2041-0.2380j],
-                [-0.4555-0.0455j,  0.7464-0.1175j,  0.3681+0.0320j, -0.0935+0.2724j],
-                [-0.4191-0.3096j,  0.1602-0.0255j, -0.4155-0.0479j,  0.5806-0.4361j],
-                [-0.4028-0.0603j, -0.1216+0.1071j, -0.4190-0.5838j, -0.5178+0.1528j]])
+        tensor([[ 0.1358-0.3038j, -0.4798+0.2431j,  0.1105+0.2308j, -0.2229+0.6963j],
+                [-0.4395+0.6202j,  0.1556-0.1974j, -0.1838-0.0838j, -0.1181+0.5516j],
+                [-0.4750+0.0762j, -0.7622+0.0020j, -0.2319-0.0263j,  0.2346-0.2795j],
+                [-0.0745-0.2729j,  0.2531+0.0496j, -0.7624+0.5079j,  0.1119+0.0410j]])
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q.conj()),torch.eye(n,dtype=torch.complex128))
         True
 
     Two matrices
         
         >>> n = 3
-        >>> theta = torch.rand(2,n*(n+1)//2,generator=rng)
-        >>> Q = transform_to_orthon_householder(theta)
+        >>> theta = torch.rand(2,n*(n-1)//2,generator=rng)
+        >>> Q = to_unitary(theta,n)
         >>> Q 
-        tensor([[[ 0.9892,  0.0139, -0.1459],
-                 [-0.0366,  0.9873, -0.1545],
-                 [-0.1419, -0.1582, -0.9772]],
+        tensor([[[ 0.3004,  0.6612,  0.6874],
+                 [-0.7630,  0.5990, -0.2428],
+                 [-0.5723, -0.4516,  0.6845]],
         <BLANKLINE>
-                [[-0.6447,  0.7567, -0.1087],
-                 [-0.6473, -0.4648,  0.6041],
-                 [-0.4066, -0.4598, -0.7895]]])
+                [[ 0.4583,  0.7552,  0.4687],
+                 [-0.7977,  0.5820, -0.1579],
+                 [-0.3921, -0.3015,  0.8691]]])
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q),torch.eye(n))
         True
 
     Batch support
 
         >>> n = 10
-        >>> theta = torch.rand(2,3,4,n*(n+1)//2,generator=rng)
-        >>> Q = transform_to_orthon_householder(theta)
+        >>> theta = torch.rand(2,3,4,n*(n-1)//2,generator=rng)
+        >>> Q = to_unitary(theta,n)
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q),torch.eye(n))
         True
-        >>> theta = torch.rand(2,3,4,n*(n+1)//2,generator=rng,dtype=torch.complex128)
-        >>> Q = transform_to_orthon_householder(theta)
+        >>> theta = torch.rand(2,3,4,n**2,generator=rng)
+        >>> Q = to_unitary(theta,n,complex_case=True)
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q.conj()),torch.eye(n,dtype=torch.complex128))
         True
     """
-    n = int((np.sqrt(1+8*theta.shape[-1])-1)/2)
-    batch_shape = theta.shape[:-1]
-    tril_indices = torch.tril_indices(n,n,device=theta.device)
-    flat_indices = tril_indices[0]*n+tril_indices[1]
-    v_mat = torch.zeros((*batch_shape,n*n),device=theta.device,dtype=theta.dtype)
-    v_mat = v_mat.index_add(-1,flat_indices,theta)
-    v_mat = v_mat.view(*batch_shape,n,n)
-    diag = torch.diagonal(v_mat,dim1=-2,dim2=-1)
-    diag_safe = torch.where(diag==0,torch.ones_like(diag),diag)
-    v_mat_scaled = v_mat/diag_safe.unsqueeze(-2)
-    sum_sq_scaled = torch.sum(v_mat_scaled.abs()**2,dim=-2)
-    tau = 2/sum_sq_scaled
-    tau = torch.where(torch.isnan(tau)|torch.isinf(tau),torch.zeros_like(tau),tau)
-    Q = torch.linalg.householder_product(v_mat_scaled,tau.to(theta.dtype))
-    return Q
+    iut = torch.triu_indices(n,n,offset=1,device=theta.device)
+    batch_shape = tuple(theta.shape[:-1])
+    if complex_case:
+        assert theta.size(-1)==(n**2)
+        complex_dtype = (theta+0j).dtype
+        H = torch.zeros((*batch_shape,n,n),dtype=complex_dtype,device=theta.device)
+        idiag = torch.arange(n,device=theta.device)
+        H[...,idiag,idiag] = 1j*theta[...,:n].to(complex_dtype)
+        off_real,off_imag = theta[...,n:n+(n**2-n)//2],theta[...,n+(n**2-n)//2:]
+        vals = off_real.to(complex_dtype)+1j*off_imag.to(complex_dtype)
+        H[...,iut[0],iut[1]] = vals
+        H[...,iut[1],iut[0]] = -vals.conj()
+    else:
+        assert theta.size(-1)==(n*(n-1)//2)
+        H = torch.zeros((*batch_shape,n,n),dtype=theta.dtype,device=theta.device)
+        H[...,iut[0],iut[1]] = theta 
+        H[...,iut[1],iut[0]] = -theta
+    return torch.matrix_exp(H)
 
+def logm_unitary(U):
+    vals, vecs = torch.linalg.eig(U.to((U+0j).dtype))
+    log_vals = torch.log(vals)
+    return torch.einsum("...ij,...j,...kj->...ik", vecs,log_vals,vecs.conj())
 
-import torch
+def from_unitary(Q, complex_case=False):
+    r"""
+    Transform from a unitary matrix.
+    
+    Args:
+        Q (torch.Tensor): With shape `(*theta.shape[:-1],n,n)` orthonormal matrices
+        complex_case (bool): If `True`, parameterize a complex matrix, otherwise a real one. 
+    
+    Returns:
+        theta (torch.Tensor): With `theta.size(-1) == n*(n-1)//2` in the real case and `theta.size(-1) == n**2` in the complex case.
+    
+    Examples:
+        >>> torch.set_default_dtype(torch.float64)
+        >>> rng = torch.Generator().manual_seed(7)
 
-def transform_from_orthon_householder(Q):
-    A,tau = torch.geqrf(Q)
-    n = Q.shape[-1]
-    v_mat_scaled = torch.tril(A,diagonal=-1)+torch.eye(n,device=Q.device,dtype=Q.dtype)
-    sum_sq_v_scaled = 2/tau
-    diag = torch.diagonal(A,dim1=-2,dim2=-1)
-    v_mat = v_mat_scaled*diag.unsqueeze(-2)
-    tril_indices = torch.tril_indices(n,n,device=Q.device)
-    theta = v_mat[...,tril_indices[0],tril_indices[1]]
+    Single matrix
+        
+        >>> n = 5
+        >>> theta = torch.rand(n*(n-1)//2,generator=rng)
+        >>> Q = to_unitary(theta,n)
+        >>> theta2 = from_unitary(Q)
+        >>> theta 
+        tensor([0.2794, 0.2737, 0.8621, 0.6567, 0.9225, 0.8395, 0.2947, 0.5607, 0.7630,
+                0.7594])
+        >>> theta2
+        tensor([0.2794, 0.2737, 0.8621, 0.6567, 0.9225, 0.8395, 0.2947, 0.5607, 0.7630,
+                0.7594])
+        >>> torch.allclose(theta,theta2)
+        True
+
+    Single complex matrix
+        
+        >>> n = 4
+        >>> theta = torch.rand(n**2,generator=rng)
+        >>> Q = to_unitary(theta,n,complex_case=True)
+        >>> theta2 = from_unitary(Q,complex_case=True)
+        >>> theta 
+        tensor([0.0630, 0.0576, 0.1674, 0.0376, 0.1222, 0.8475, 0.0132, 0.9499, 0.1099,
+                0.9936, 0.9242, 0.8652, 0.6603, 0.3073, 0.8949, 0.7310])
+        >>> theta2
+        tensor([0.0630, 0.0576, 0.1674, 0.0376, 0.1222, 0.8475, 0.0132, 0.9499, 0.1099,
+                0.9936, 0.9242, 0.8652, 0.6603, 0.3073, 0.8949, 0.7310])
+        >>> torch.allclose(theta,theta2)
+        True
+
+    Two matrices
+        
+        >>> n = 3
+        >>> theta = torch.rand(2,n*(n-1)//2,generator=rng)
+        >>> Q = to_unitary(theta,n)
+        >>> theta2 = from_unitary(Q)
+        >>> torch.allclose(theta,theta2)
+        True
+
+    Batch support
+
+        >>> n = 10
+        >>> theta = torch.rand(2,3,4,n*(n-1)//2,generator=rng)
+        >>> Q = to_unitary(theta,n)
+        >>> theta2 = from_unitary(Q)
+        >>> Q2 = to_unitary(theta2,n)
+        >>> torch.allclose(Q,Q2)
+        True
+        >>> theta = torch.rand(2,3,4,n**2,generator=rng)
+        >>> Q = to_unitary(theta,n,complex_case=True)
+        >>> theta2 = from_unitary(Q,complex_case=True)
+        >>> Q2 = to_unitary(theta2,n,complex_case=True)
+        >>> torch.allclose(Q,Q2)
+        True
+    """
+    n = Q.size(-1)
+    L = logm_unitary(Q)
+    iut = torch.triu_indices(n,n,offset=1,device=Q.device)
+    if complex_case:
+        idiag = torch.arange(n,device=Q.device)
+        diag = L[...,idiag,idiag].imag
+        off_diag = L[...,iut[0],iut[1]]
+        theta = torch.cat([diag,off_diag.real,off_diag.imag],dim=-1)
+    else:
+        theta = L[...,iut[0],iut[1]].real
     return theta
+

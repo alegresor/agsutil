@@ -4,8 +4,8 @@ from .algos import (
     lm_opt,
     minres,
     minres_qlp_cs,
-    transform_to_orthon_householder,
-    transform_from_orthon_householder,
+    to_unitary,
+    from_unitary,
     )
 from .utils import (
     print_data_signatures,
