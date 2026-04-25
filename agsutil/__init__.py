@@ -5,6 +5,7 @@ from .algos import (
     minres,
     minres_qlp_cs,
     transform_to_orthon_householder,
+    transform_from_orthon_householder,
     )
 from .utils import (
     print_data_signatures,

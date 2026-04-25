@@ -10,7 +10,6 @@ def lm_opt(
         batch_dims = 0, 
         iters = 10,
         residtol = None,
-        minimize = True,
         loss_mult = 1,
         loss_shift = 0,
         f_kwargs_vec = {},
@@ -44,7 +43,6 @@ def lm_opt(
         batch_dims (int): Number of batch dimension. 
         iters (int): Number of iterations. 
         residtol (float): Non-negative tolerance on the maximum residual for early stopping, defaults to `1e-12` for `torch.float64` and `2.5e-4` for `torch.float32`.
-        minimize (bool): If `True`, minimize the objective, otherwise maximize the objective. 
         loss_mult (bool): Scalar amount by which to multiply the loss so `loss = loss_mult*torch.sum(resid**2,dim=-1)+loss_shift`.
         loss_shift (bool): Scalar amount by which to shift the loss so `loss = loss_mult*torch.sum(resid**2,dim=-1)+loss_shift`.
         f_kwargs_vec (dict): Keyword arguments to `f` which will be vectorized over the first dimension. 
@@ -313,9 +311,9 @@ def lm_opt(
     assert store_data_iters%1==0
     assert store_data_iters>=0 
     assert isinstance(store_all_data,bool)
-    assert isinstance(minimize,bool)
-    signminimize = 1 if minimize else -1
     loss_mult = float(loss_mult)
+    assert loss_mult!=0 
+    signminimize = -1 if loss_mult<0 else 1
     loss_shift = float(loss_shift)
     if residtol is None: 
         if default_dtype==torch.float64:
@@ -491,7 +489,7 @@ def lm_opt(
         residf_new = torch.inf*torch.ones((Q_alphas,Q_lams,R,K),device=device)
         _,(resid_new_success,*_) = f_resid(thetas_new[:,success],*f_kwargs_vec_vals_success)
         residf_new[:,success] = resid_new_success.reshape((Q_alphas,resid_new_success.size(1),K))
-        losses_new = signminimize*(residf_new**2).sum(-1)
+        losses_new = loss_mult*(residf_new**2).sum(-1)+loss_shift
         ibest = losses_new.reshape((Q_alphas*Q_lams,R)).argmin(0) # (R,)
         ibest_alpha,ibest_lam = ibest//Q_lams,ibest%Q_lams
         lam_best_new = lams_try[ibest_lam,Rrange] # (R,)
@@ -1496,3 +1494,17 @@ def transform_to_orthon_householder(theta):
     tau = torch.where(torch.isnan(tau)|torch.isinf(tau),torch.zeros_like(tau),tau)
     Q = torch.linalg.householder_product(v_mat_scaled,tau.to(theta.dtype))
     return Q
+
+
+import torch
+
+def transform_from_orthon_householder(Q):
+    A,tau = torch.geqrf(Q)
+    n = Q.shape[-1]
+    v_mat_scaled = torch.tril(A,diagonal=-1)+torch.eye(n,device=Q.device,dtype=Q.dtype)
+    sum_sq_v_scaled = 2/tau
+    diag = torch.diagonal(A,dim1=-2,dim2=-1)
+    v_mat = v_mat_scaled*diag.unsqueeze(-2)
+    tril_indices = torch.tril_indices(n,n,device=Q.device)
+    theta = v_mat[...,tril_indices[0],tril_indices[1]]
+    return theta
