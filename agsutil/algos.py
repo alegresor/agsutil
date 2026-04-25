@@ -1512,7 +1512,8 @@ def from_unitary(Q, complex_case=False):
         complex_case (bool): If `True`, parameterize a complex matrix, otherwise a real one. 
     
     Returns:
-        theta (torch.Tensor): With `theta.size(-1) == n*(n-1)//2` in the real case and `theta.size(-1) == n**2` in the complex case.
+        theta (torch.Tensor): With `theta.size(-1) == n*(n-1)//2` in the real case and `theta.size(-1) == n**2` in the complex case.  
+            Note that this `theta` is not unique, as shown in the following doctests.
     
     Examples:
         >>> torch.set_default_dtype(torch.float64)
@@ -1520,41 +1521,38 @@ def from_unitary(Q, complex_case=False):
 
     Single matrix
         
-        >>> n = 5
+        >>> n = 10
         >>> theta = torch.rand(n*(n-1)//2,generator=rng)
         >>> Q = to_unitary(theta,n)
         >>> theta2 = from_unitary(Q)
-        >>> theta 
-        tensor([0.2794, 0.2737, 0.8621, 0.6567, 0.9225, 0.8395, 0.2947, 0.5607, 0.7630,
-                0.7594])
-        >>> theta2
-        tensor([0.2794, 0.2737, 0.8621, 0.6567, 0.9225, 0.8395, 0.2947, 0.5607, 0.7630,
-                0.7594])
         >>> torch.allclose(theta,theta2)
+        False
+        >>> Q2 = to_unitary(theta2,n)
+        >>> torch.allclose(Q,Q2)
         True
 
     Single complex matrix
         
-        >>> n = 4
+        >>> n = 10
         >>> theta = torch.rand(n**2,generator=rng)
         >>> Q = to_unitary(theta,n,complex_case=True)
         >>> theta2 = from_unitary(Q,complex_case=True)
-        >>> theta 
-        tensor([0.0630, 0.0576, 0.1674, 0.0376, 0.1222, 0.8475, 0.0132, 0.9499, 0.1099,
-                0.9936, 0.9242, 0.8652, 0.6603, 0.3073, 0.8949, 0.7310])
-        >>> theta2
-        tensor([0.0630, 0.0576, 0.1674, 0.0376, 0.1222, 0.8475, 0.0132, 0.9499, 0.1099,
-                0.9936, 0.9242, 0.8652, 0.6603, 0.3073, 0.8949, 0.7310])
         >>> torch.allclose(theta,theta2)
+        False
+        >>> Q2 = to_unitary(theta2,n,complex_case=True)
+        >>> torch.allclose(Q,Q2)
         True
 
     Two matrices
         
-        >>> n = 3
+        >>> n = 10
         >>> theta = torch.rand(2,n*(n-1)//2,generator=rng)
         >>> Q = to_unitary(theta,n)
         >>> theta2 = from_unitary(Q)
         >>> torch.allclose(theta,theta2)
+        False
+        >>> Q2 = to_unitary(theta2,n)
+        >>> torch.allclose(Q,Q2)
         True
 
     Batch support
