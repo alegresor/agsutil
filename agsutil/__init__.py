@@ -10,6 +10,7 @@ from .algos import (
 from .utils import (
     print_data_signatures,
     Timer, 
+    logcomb,
     )
 from .plots import (
     mpl_setup,

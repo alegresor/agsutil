@@ -106,3 +106,37 @@ class Timer():
             self.torch_backend.synchronize()
             tdelta = self.t0.elapsed_time(self.tend)/1000
         return float(tdelta)
+
+def logcomb(n,k):
+    r"""
+    $\log \binom{n}{k}$
+    
+    Args:
+        n (torch.Tensor): $n$.
+        k (torch.Tensor): $k$.
+
+    Returns:
+        nchoosek (torch.Tensor): $\log \binom{n}{k}$.
+
+    Examples:
+        >>> logcomb(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])
+        tensor([[0.0000,   -inf,   -inf,   -inf,   -inf],
+                [0.6931, 0.0000,   -inf,   -inf,   -inf],
+                [1.0986, 1.0986, 0.0000,   -inf,   -inf],
+                [1.3863, 1.7918, 1.3863, 0.0000,   -inf],
+                [1.6094, 2.3026, 2.3026, 1.6094, 0.0000],
+                [1.7918, 2.7081, 2.9957, 2.7081, 1.7918],
+                [1.9459, 3.0445, 3.5553, 3.5553, 3.0445]])
+        >>> torch.exp(logcomb(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])).to(int)
+        tensor([[ 1,  0,  0,  0,  0],
+                [ 2,  1,  0,  0,  0],
+                [ 2,  2,  1,  0,  0],
+                [ 4,  6,  4,  1,  0],
+                [ 4,  9,  9,  4,  1],
+                [ 6, 15, 20, 15,  6],
+                [ 7, 21, 35, 35, 21]])
+    """ 
+    assert (n>=0).all()
+    assert (k>=0).all()
+    # assert (k<=n).all()
+    return torch.lgamma(n+1)-torch.lgamma(k+1)-torch.lgamma(n-k+1)
