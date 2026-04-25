@@ -9,10 +9,9 @@ from .utils import (
     print_data_signatures,
     Timer, 
     logcomb,
+    to_unitary_qr,
     to_unitary_expskewh,
     from_unitary_expskewh,
-    to_unitary_householder,
-    from_unitary_householder,
     )
 from .plots import (
     mpl_setup,

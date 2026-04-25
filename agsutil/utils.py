@@ -348,15 +348,15 @@ def from_unitary_expskewh(Q, complex_case=False):
         theta = L[...,iut[0],iut[1]].real
     return theta
 
-def to_unitary_householder(theta):
+def to_unitary_qr(A):
     r"""
-    Transform to a unitary matrix using Householder reflectors.
+    Transform to a unitary matrix using the QR decomposition.
     
     Args:
-        theta (torch.Tensor): With `theta.size(-1) == n*(n+1)//2`.
+        A (torch.Tensor): With `A.shape == (...,n,n)`.
     
     Returns:
-        Q (torch.Tensor): With shape `(*theta.shape[:-1],n,n)` unitary matrices
+        Q (torch.Tensor): With shape `(*A.shape[:-1],n,n)` unitary matrices
     
     Examples:
         >>> torch.set_default_dtype(torch.float64)
@@ -365,174 +365,80 @@ def to_unitary_householder(theta):
     Single matrix
         
         >>> n = 5
-        >>> theta = torch.rand(n*(n+1)//2,generator=rng)
-        >>> Q = to_unitary_householder(theta)
+        >>> A = torch.rand(n,n,generator=rng)
+        >>> Q = to_unitary_qr(A)
         >>> Q 
-        tensor([[ 1.5869e-01,  6.9116e-01, -5.9636e-01, -3.7208e-01, -5.4998e-02],
-                [-7.0632e-01,  5.3809e-01,  1.8971e-01,  4.0821e-01, -9.4576e-02],
-                [-2.4794e-01, -3.8067e-01, -7.7792e-01,  4.3410e-01, -8.7409e-04],
-                [-6.4196e-01, -2.6400e-01, -5.6170e-02, -6.9850e-01,  1.6474e-01],
-                [-4.8422e-02, -1.3472e-01,  6.4098e-03, -1.3629e-01, -9.8025e-01]])
+        tensor([[ 0.1819,  0.2300,  0.8956,  0.3042,  0.1391],
+                [ 0.5466, -0.1828, -0.3033,  0.7517, -0.1037],
+                [ 0.0410,  0.0450,  0.1626, -0.0886, -0.9808],
+                [ 0.5518, -0.6553,  0.2046, -0.4684,  0.0693],
+                [ 0.6017,  0.6944, -0.1939, -0.3392,  0.0555]])
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q),torch.eye(n))
         True
 
     Single complex matrix
         
         >>> n = 4
-        >>> theta = torch.rand(n*(n+1)//2,generator=rng,dtype=torch.complex128)
-        >>> Q = to_unitary_householder(theta)
+        >>> A = torch.rand(n,n,generator=rng,dtype=torch.complex128)
+        >>> Q = to_unitary_qr(A)
         >>> Q 
-        tensor([[ 0.5585+0.0000j,  0.4731-0.0246j,  0.4507+0.4441j,  0.2503-0.0267j],
-                [-0.1357-0.3951j,  0.2355+0.4158j,  0.2419+0.0181j, -0.5136+0.5239j],
-                [-0.3228-0.4190j, -0.4130+0.3013j,  0.1762+0.3841j,  0.5286-0.0295j],
-                [-0.4229-0.2344j,  0.3837-0.3723j, -0.3027+0.5202j, -0.2237-0.2609j]])
+        tensor([[ 0.3820+4.9592e-01j,  0.6227-3.3313e-01j,  0.2301+4.5375e-04j,
+                 -0.1762-1.5935e-01j],
+                [ 0.3750+1.7952e-01j, -0.4719+1.6687e-01j,  0.1957+5.4894e-02j,
+                  0.2213-6.9735e-01j],
+                [ 0.4702+1.8505e-01j,  0.0477+2.3842e-01j, -0.8138+2.9071e-02j,
+                  0.0823+1.2523e-01j],
+                [ 0.4241+1.1515e-02j,  0.0064+4.3764e-01j,  0.4874-7.1170e-02j,
+                  0.2837+5.5258e-01j]])
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q.conj()),torch.eye(n,dtype=torch.complex128))
         True
 
     Two matrices
         
         >>> n = 3
-        >>> theta = torch.rand(2,n*(n+1)//2,generator=rng)
-        >>> Q = to_unitary_householder(theta)
+        >>> A = torch.rand(2,n,n,generator=rng)
+        >>> Q = to_unitary_qr(A)
         >>> Q 
-        tensor([[[-0.2018,  0.9175, -0.3426],
-                 [-0.8854, -0.0213,  0.4644],
-                 [-0.4188, -0.3971, -0.8167]],
+        tensor([[[ 0.6587,  0.2967, -0.6914],
+                 [ 0.6269, -0.7246,  0.2864],
+                 [ 0.4160,  0.6221,  0.6633]],
         <BLANKLINE>
-                [[-0.8512,  0.4049, -0.3338],
-                 [-0.4117, -0.1208,  0.9033],
-                 [-0.3254, -0.9063, -0.2696]]])
+                [[ 0.5190,  0.8009, -0.2985],
+                 [ 0.6364, -0.1289,  0.7605],
+                 [ 0.5706, -0.5847, -0.5766]]])
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q),torch.eye(n))
         True
     
     Two complex matrices
         
         >>> n = 3
-        >>> theta = torch.rand(2,n*(n+1)//2,generator=rng,dtype=torch.complex128)
-        >>> Q = to_unitary_householder(theta)
+        >>> A = torch.rand(2,n,n,generator=rng,dtype=torch.complex128)
+        >>> Q = to_unitary_qr(A)
         >>> Q 
-        tensor([[[ 0.5076+0.0000j,  0.5605+0.0584j, -0.1532+0.6334j],
-                 [-0.4490-0.3380j,  0.6529+0.4381j,  0.1125-0.2311j],
-                 [-0.4541-0.4694j, -0.2258-0.1153j, -0.5634+0.4381j]],
+        tensor([[[ 0.5834+0.1938j, -0.0560+0.3895j, -0.3185+0.6048j],
+                 [ 0.4323+0.4517j,  0.6040-0.4547j,  0.0490-0.1873j],
+                 [ 0.4700+0.1009j, -0.3015+0.4275j,  0.4046-0.5759j]],
         <BLANKLINE>
-                [[-0.0921+0.0000j,  0.9529-0.1993j,  0.1794+0.1074j],
-                 [-0.5751-0.2846j, -0.0847+0.1434j,  0.5900-0.4608j],
-                 [-0.5010-0.5734j,  0.0182-0.1552j, -0.6126+0.1434j]]])
+                [[ 0.2769+0.2957j, -0.1093+0.8955j, -0.0100+0.1480j],
+                 [ 0.0858+0.6104j,  0.0647-0.1696j,  0.7218-0.2572j],
+                 [ 0.2022+0.6443j,  0.2591-0.2933j, -0.5677+0.2621j]]])
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q.conj()),torch.eye(n,dtype=torch.complex128))
         True
 
     Batch support
 
         >>> n = 10
-        >>> theta = torch.rand(2,3,4,n*(n+1)//2,generator=rng)
-        >>> Q = to_unitary_householder(theta)
+        >>> A = torch.rand(2,3,4,n,n,generator=rng)
+        >>> Q = to_unitary_qr(A)
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q),torch.eye(n))
         True
-        >>> theta = torch.rand(2,3,4,n*(n+1)//2,generator=rng,dtype=torch.complex128)
-        >>> Q = to_unitary_householder(theta)
+        >>> A = torch.rand(2,3,4,n,n,generator=rng,dtype=torch.complex128)
+        >>> Q = to_unitary_qr(A)
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q.conj()),torch.eye(n,dtype=torch.complex128))
         True
     """
-    n = int((np.sqrt(1+8*theta.size(-1))-1)//2)
-    batch_shape = tuple(theta.shape[:-1])
-    batch_ones = torch.ones(batch_shape,dtype=int,device=theta.device)
-    ilt = torch.tril_indices(n,n,offset=-1,device=theta.device)
-    iltf = torch.einsum("...,i->...i",batch_ones,ilt[0]*n+ilt[1])
-    idiag = torch.arange(n,device=theta.device)
-    idiagf = torch.einsum("...,i->...i",batch_ones,idiag*n+idiag)
-    diag = torch.ones(idiagf.shape,dtype=theta.dtype,device=theta.device)
-    A = torch.zeros((*batch_shape,n*n),dtype=theta.dtype,device=theta.device)
-    A = A.scatter_add(-1,iltf,theta[...,n:])
-    A = A.scatter_add(-1,idiagf,diag)
-    A = A.reshape((*batch_shape,n,n))
-    tau_raw = theta[...,:n]
-    tau = (2/torch.norm(A,dim=-2)**2).to(A.dtype)
-    Q = torch.linalg.householder_product(A,tau)
-    return Q
-
-def from_unitary_householder(Q):
-    # r"""
-    # Transform from a unitary matrix using Householder reflectors.
-    
-    # Args:
-    #     Q (torch.Tensor): With shape `(*theta.shape[:-1],n,n)` orthonormal matrices
-    
-    # Returns:
-    #     theta (torch.Tensor): With `theta.size(-1) == n*(n+1)//2` .  
-    #         Note that this `theta` is not unique, as shown in the following doctests.
-    
-    # Examples:
-    #     >>> torch.set_default_dtype(torch.float64)
-    #     >>> rng = torch.Generator().manual_seed(7)
-
-    # Single matrix
-        
-    #     >>> n = 10
-    #     >>> theta = torch.rand(n*(n+1)//2,generator=rng)
-    #     >>> Q = to_unitary_householder(theta)
-    #     >>> theta2 = from_unitary_householder(Q)
-    #     >>> torch.allclose(theta,theta2)
-    #     False
-    #     >>> Q2 = to_unitary_householder(theta2)
-    #     >>> torch.allclose(Q,Q2)
-    #     True
-
-    # Single complex matrix
-        
-    #     >>> n = 10
-    #     >>> theta = torch.rand(n*(n+1)//2,generator=rng,dtype=torch.complex128)
-    #     >>> Q = to_unitary_householder(theta)
-    #     >>> theta2 = from_unitary_householder(Q)
-    #     >>> torch.allclose(theta,theta2)
-    #     False
-    #     >>> Q2 = to_unitary_householder(theta2)
-    #     >>> torch.allclose(Q,Q2)
-    #     True
-
-    # Two matrices
-        
-    #     >>> n = 10
-    #     >>> theta = torch.rand(2,n*(n+1)//2,generator=rng)
-    #     >>> Q = to_unitary_householder(theta)
-    #     >>> theta2 = from_unitary_householder(Q)
-    #     >>> torch.allclose(theta,theta2)
-    #     False
-    #     >>> Q2 = to_unitary_householder(theta2)
-    #     >>> torch.allclose(Q,Q2)
-    #     True
-
-    # Two complex matrices
-        
-    #     >>> n = 3
-    #     >>> theta = torch.rand(2,n*(n+1)//2,generator=rng,dtype=torch.complex128)
-    #     >>> Q = to_unitary_householder(theta)
-    #     >>> theta2 = from_unitary_householder(Q)
-    #     >>> Q2 = to_unitary_householder(theta2)
-    #     >>> torch.allclose(Q,Q2)
-    #     True
-    
-    # Batch support
-
-    #     >>> n = 10
-    #     >>> theta = torch.rand(2,3,4,n*(n+1)//2,generator=rng)
-    #     >>> Q = to_unitary_householder(theta)
-    #     >>> theta2 = from_unitary_householder(Q)
-    #     >>> Q2 = to_unitary_householder(theta2)
-    #     >>> torch.allclose(Q,Q2)
-    #     True
-    #     >>> theta = torch.rand(2,3,4,n*(n+1)//2,generator=rng,dtype=torch.complex128)
-    #     >>> Q = to_unitary_householder(theta)
-    #     >>> theta2 = from_unitary_householder(Q)
-    #     >>> Q2 = to_unitary_householder(theta2)
-    #     >>> torch.allclose(Q,Q2)
-    #     True
-    # """
-    n = Q.size(-1)
-    A,tau = torch.geqrf(Q)
-    diag = torch.diagonal(A,dim1=-2,dim2=-1)
-    tau_normalized = tau * (diag.abs()**2)
-    A_normalized = A/diag.unsqueeze(-2)
-    ilt = torch.tril_indices(n,n,offset=-1,device=Q.device)
-    v_params = A_normalized[...,ilt[0],ilt[1]]
-    theta = torch.cat([tau_normalized,v_params],dim=-1)
-    return theta
+    n = A.size(-1)
+    assert A.shape[-2:]==(n,n)
+    Q,R = torch.linalg.qr(A)
+    phases = torch.sgn(torch.diagonal(R,dim1=-2,dim2=-1))
+    return Q*phases.unsqueeze(-2)
