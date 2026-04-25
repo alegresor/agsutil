@@ -1466,6 +1466,22 @@ def to_unitary(theta, n, complex_case=False):
                  [-0.3921, -0.3015,  0.8691]]])
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q),torch.eye(n))
         True
+    
+    Two complex matrices
+        
+        >>> n = 3
+        >>> theta = torch.rand(2,n**2,generator=rng)
+        >>> Q = to_unitary(theta,n,complex_case=True)
+        >>> Q 
+        tensor([[[ 0.5591+0.3745j, -0.4342+0.5076j, -0.1283+0.2907j],
+                 [-0.4802+0.4013j,  0.5099+0.4179j, -0.2657+0.3211j],
+                 [-0.3843+0.0887j, -0.2972+0.1756j,  0.8185+0.2353j]],
+        <BLANKLINE>
+                [[ 0.4860+0.5953j, -0.1642+0.0458j, -0.3162+0.5295j],
+                 [-0.5638+0.0805j,  0.3753+0.0607j,  0.2470+0.6856j],
+                 [-0.2898+0.0325j, -0.8621+0.2884j,  0.2790+0.1037j]]])
+        >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q.conj()),torch.eye(n,dtype=torch.complex128))
+        True
 
     Batch support
 
@@ -1479,23 +1495,30 @@ def to_unitary(theta, n, complex_case=False):
         >>> torch.allclose(torch.einsum("...ji,...jk->...ik",Q,Q.conj()),torch.eye(n,dtype=torch.complex128))
         True
     """
-    iut = torch.triu_indices(n,n,offset=1,device=theta.device)
     batch_shape = tuple(theta.shape[:-1])
+    batch_ones = torch.ones(batch_shape,dtype=int,device=theta.device)
+    iut = torch.triu_indices(n,n,offset=1,device=theta.device)
+    iutf = torch.einsum("...,i->...i",batch_ones,iut[0]*n+iut[1])
+    iltf = torch.einsum("...,i->...i",batch_ones,iut[1]*n+iut[0])
     if complex_case:
         assert theta.size(-1)==(n**2)
         complex_dtype = (theta+0j).dtype
-        H = torch.zeros((*batch_shape,n,n),dtype=complex_dtype,device=theta.device)
+        H = torch.zeros((*batch_shape,n*n),dtype=complex_dtype,device=theta.device)
         idiag = torch.arange(n,device=theta.device)
-        H[...,idiag,idiag] = 1j*theta[...,:n].to(complex_dtype)
+        idiagf = torch.einsum("...,i->...i",batch_ones,idiag*n+idiag)
+        diag = 1j*theta[...,:n].to(complex_dtype)
         off_real,off_imag = theta[...,n:n+(n**2-n)//2],theta[...,n+(n**2-n)//2:]
-        vals = off_real.to(complex_dtype)+1j*off_imag.to(complex_dtype)
-        H[...,iut[0],iut[1]] = vals
-        H[...,iut[1],iut[0]] = -vals.conj()
+        off_vals = off_real.to(complex_dtype)+1j*off_imag.to(complex_dtype)
+        H = H.scatter_add(-1,idiagf,diag)
+        H = H.scatter_add(-1,iutf,off_vals)
+        H = H.scatter_add(-1,iltf,-off_vals.conj())
+        H = H.reshape((*batch_shape,n,n))
     else:
         assert theta.size(-1)==(n*(n-1)//2)
-        H = torch.zeros((*batch_shape,n,n),dtype=theta.dtype,device=theta.device)
-        H[...,iut[0],iut[1]] = theta 
-        H[...,iut[1],iut[0]] = -theta
+        H = torch.zeros((*batch_shape,n*n),dtype=theta.dtype,device=theta.device)
+        H = H.scatter_add(-1,iutf,theta)
+        H = H.scatter_add(-1,iltf,-theta)
+        H = H.reshape((*batch_shape,n,n))
     return torch.matrix_exp(H)
 
 def logm_unitary(U):
@@ -1555,6 +1578,16 @@ def from_unitary(Q, complex_case=False):
         >>> torch.allclose(Q,Q2)
         True
 
+    Two complex matrices
+        
+        >>> n = 3
+        >>> theta = torch.rand(2,n**2,generator=rng)
+        >>> Q = to_unitary(theta,n,complex_case=True)
+        >>> theta2 = from_unitary(Q,complex_case=True)
+        >>> Q2 = to_unitary(theta2,n,complex_case=True)
+        >>> torch.allclose(Q,Q2)
+        True
+    
     Batch support
 
         >>> n = 10
