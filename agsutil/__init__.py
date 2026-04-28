@@ -21,6 +21,7 @@ from .utils import (
     enumerate_sums,
     len_enumerate_sums,
     enumerate_partitions,
+    icdf_std_normal,
     )
 from .plots import (
     mpl_setup,

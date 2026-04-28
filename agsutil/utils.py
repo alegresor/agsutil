@@ -670,3 +670,23 @@ def enumerate_partitions(n, max_val=None):
     for i in range(min(n,max_val),0,-1):
         for p in enumerate_partitions(n-i,i):
             yield [i]+p
+
+def icdf_std_normal(x):
+    r"""
+    Inverse CDF of the standard normal distribution $\mathcal{N}(0,1)$. 
+
+    Examples:
+        >>> torch.set_default_dtype(torch.float64)
+        >>> rng = torch.Generator().manual_seed(7)
+
+        >>> x = torch.rand(3,4,generator=rng)
+        >>> g = icdf_std_normal(x)
+        >>> g 
+        tensor([[-0.5847, -0.6017,  1.0898,  0.4034],
+                [ 1.4223,  0.9926, -0.5397,  0.1528],
+                [ 0.7161,  0.7042, -1.5299, -1.5756]])
+        >>> g2 = icdf_normal = torch.distributions.Normal(loc=torch.zeros(1),scale=torch.ones(1)).icdf(x)
+        >>> torch.allclose(g,g2)
+        True
+    """
+    return np.sqrt(2)*torch.erfinv(2*x-1)
