@@ -1,6 +1,7 @@
 import torch 
 import time
 import numpy as np 
+import itertools
 
 def print_data_signatures(data, name="data", print_devices=False, print_dtypes=False, verbose_indent=4):
     r""" 
@@ -567,3 +568,45 @@ def comb(n,k):
                 [ 1,  7, 21, 35, 35, 21]])
     """ 
     return multinomialcoeff(n,k,n-k).round().to(int)
+
+def enumerate_sums(s, t):
+    r"""
+    Generator of all possible ways to choose $s \in \mathbb{N}_0$ non-negative integers which sum to $t \in \mathbb{N}_0$.  
+    There are a total of $\binom{t+s-1}{s-1} = \frac{(t+s-1)!}{t!(s-1)!}$ choices. 
+
+    Args:
+        s (int): Number of integers to choose. 
+        t (int): Number of items to allocate. 
+    
+    Returns: 
+        g (Generator): Genrator of tuples of length $s$. 
+
+    Examples: 
+    
+    2 non-negative integers that sum to 3 
+
+        >>> for v in enumerate_sums(2,3): 
+        ...     print(v)
+        (0, 3)
+        (1, 2)
+        (2, 1)
+        (3, 0)
+        >>> comb(torch.tensor(3+2-1),torch.tensor(2-1)).item()
+        4
+
+    3 non-negative integers that sum to 2 
+
+        >>> for v in enumerate_sums(3,2): 
+        ...     print(v)
+        (0, 0, 2)
+        (0, 1, 1)
+        (0, 2, 0)
+        (1, 0, 1)
+        (1, 1, 0)
+        (2, 0, 0)
+        >>> comb(torch.tensor(2+3-1),torch.tensor(3-1)).item()
+        6
+    """ 
+    for combo in itertools.combinations(range(t+s-1),s-1):
+        bars = (-1,)+combo+(t+s-1,)
+        yield tuple(bars[i+1]-bars[i]-1 for i in range(s))

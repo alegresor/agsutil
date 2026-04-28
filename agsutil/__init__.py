@@ -18,6 +18,7 @@ from .utils import (
     factorial,
     logcomb,
     comb,
+    enumerate_sums,
     )
 from .plots import (
     mpl_setup,
