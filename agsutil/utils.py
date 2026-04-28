@@ -434,7 +434,8 @@ def get_torch_rng(seed=None, device=None):
 
 def logmultinomialcoeff(n, *ks):
     r"""
-    $\log \binom{n}{k_1,\dots,k_m} = \log \left(\frac{n!}{k_1! \cdots k_m!}  = \sum_{i=1}^n \log i - \sum_{j=1}^m \sum_{i=1}^{k_j} \log i$
+    $\log \binom{n}{k_1,\dots,k_m} = \log \left(\frac{n!}{k_1! \cdots k_m!}\right)$.  
+    Note that we do not enforce $k_1+\cdots+k_m=n$.
     
     Args:
         n (torch.Tensor): $n$.
@@ -444,15 +445,15 @@ def logmultinomialcoeff(n, *ks):
         y (torch.Tensor): $\log \binom{n}{k_1,\dots,k_m}$.
 
     Examples:
-        >>> n = torch.arange(8)
-        >>> k1 = torch.arange(2)
+        >>> n = torch.arange(6,12)
+        >>> k1 = torch.arange(0,2)
         >>> k2 = torch.arange(2,4)
         >>> k3 = torch.arange(4,6)
         >>> logmultinomialcoeff(n[None,:],k1[:,None],k2[:,None],k3[:,None])
-        tensor([[-3.8712e+00, -3.8712e+00, -3.1781e+00, -2.0794e+00, -6.9315e-01,
-                  9.1629e-01,  2.7081e+00,  4.6540e+00],
-                [-6.5793e+00, -6.5793e+00, -5.8861e+00, -4.7875e+00, -3.4012e+00,
-                 -1.7918e+00,  8.8818e-16,  1.9459e+00]])
+        tensor([[2.7081e+00, 4.6540e+00, 6.7334e+00, 8.9306e+00, 1.1233e+01, 1.3631e+01],
+                [8.8818e-16, 1.9459e+00, 4.0254e+00, 6.2226e+00, 8.5252e+00, 1.0923e+01]])
+        >>> logmultinomialcoeff(n[:,None,None,None],k1[None,:,None,None],k2[None,None,:,None],k3[None,None,None,:]).shape
+        torch.Size([6, 2, 2, 2])
     """ 
     assert (n>=0).all()
     m = len(ks) 
@@ -464,7 +465,8 @@ def logmultinomialcoeff(n, *ks):
 
 def multinomialcoeff(n, *ks):
     r"""
-    $\binom{n}{k_1,\dots,k_m} = \left(\frac{n!}{k_1! \cdots k_m!}$
+    $\binom{n}{k_1,\dots,k_m} = \frac{n!}{k_1! \cdots k_m!}$.  
+    Note that we do not enforce $k_1+\cdots+k_m=n$, so we do not round the result to the nearest integer.
     
     Args:
         n (torch.Tensor): $n$.
@@ -474,67 +476,94 @@ def multinomialcoeff(n, *ks):
         y (torch.Tensor): $\binom{n}{k_1,\dots,k_m}$.
 
     Examples:
-        >>> multinomialcoeff(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])
-        tensor([[   1,    0,    0,    0,    0],
-                [   2,    1,    0,    0,    0],
-                [   6,    2,    1,    0,    0],
-                [  24,   12,    4,    1,    0],
-                [ 119,   59,   19,    4,    1],
-                [ 720,  360,  120,   30,    6],
-                [5040, 2520,  840,  210,   42]])
+        >>> n = torch.arange(6,12)
+        >>> k1 = torch.arange(0,2)
+        >>> k2 = torch.arange(2,4)
+        >>> k3 = torch.arange(4,6)
+        >>> multinomialcoeff(n[None,:],k1[:,None],k2[:,None],k3[:,None])
+        tensor([[1.5000e+01, 1.0500e+02, 8.4000e+02, 7.5600e+03, 7.5600e+04, 8.3160e+05],
+                [1.0000e+00, 7.0000e+00, 5.6000e+01, 5.0400e+02, 5.0400e+03, 5.5440e+04]])
+        >>> multinomialcoeff(n[:,None,None,None],k1[None,:,None,None],k2[None,None,:,None],k3[None,None,None,:]).shape
+        torch.Size([6, 2, 2, 2])
     """ 
-    return torch.exp(logmultinomialcoeff(n,*ks)).to(int)
+    return torch.exp(logmultinomialcoeff(n,*ks))
+
+def logfactorial(n):
+    r"""
+    $\log(n!)$
+    
+    Args:
+        n (torch.Tensor): $n$.
+
+    Returns:
+        y (torch.Tensor): $\log(n!)$.
+
+    Examples:
+        >>> logfactorial(torch.arange(1,8))
+        tensor([0.0000, 0.6931, 1.7918, 3.1781, 4.7875, 6.5793, 8.5252])
+    """ 
+    return logmultinomialcoeff(n)
+
+def factorial(n):
+    r"""
+    $n!$
+    
+    Args:
+        n (torch.Tensor): $n$.
+
+    Returns:
+        y (torch.Tensor): $n!$.
+
+    Examples:
+        >>> factorial(torch.arange(1,8))
+        tensor([   1,    2,    6,   24,  120,  720, 5040])
+    """ 
+    return multinomialcoeff(n).round().to(int)
 
 def logcomb(n,k):
     r"""
-    $\log \binom{n}{k}$
+    $\log \binom{n}{k} = \log \left(\frac{n!}{k!(n-k)!}\right)$
     
     Args:
         n (torch.Tensor): $n$.
         k (torch.Tensor): $k$.
 
     Returns:
-        nchoosek (torch.Tensor): $\log \binom{n}{k}$.
+        y (torch.Tensor): $\log \binom{n}{k}$.
 
     Examples:
-        >>> logcomb(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])
-        tensor([[0.0000,   -inf,   -inf,   -inf,   -inf],
-                [0.6931, 0.0000,   -inf,   -inf,   -inf],
-                [1.0986, 1.0986, 0.0000,   -inf,   -inf],
-                [1.3863, 1.7918, 1.3863, 0.0000,   -inf],
-                [1.6094, 2.3026, 2.3026, 1.6094, 0.0000],
-                [1.7918, 2.7081, 2.9957, 2.7081, 1.7918],
-                [1.9459, 3.0445, 3.5553, 3.5553, 3.0445]])
-        >>> torch.exp(logcomb(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])).to(int)
-        tensor([[ 1,  0,  0,  0,  0],
-                [ 2,  1,  0,  0,  0],
-                [ 2,  2,  1,  0,  0],
-                [ 4,  6,  4,  1,  0],
-                [ 4,  9,  9,  4,  1],
-                [ 6, 15, 20, 15,  6],
-                [ 7, 21, 35, 35, 21]])
+        >>> logcomb(torch.arange(8)[:,None],torch.arange(6)[None,:])
+        tensor([[0.0000,   -inf,   -inf,   -inf,   -inf,   -inf],
+                [0.0000, 0.0000,   -inf,   -inf,   -inf,   -inf],
+                [0.0000, 0.6931, 0.0000,   -inf,   -inf,   -inf],
+                [0.0000, 1.0986, 1.0986, 0.0000,   -inf,   -inf],
+                [0.0000, 1.3863, 1.7918, 1.3863, 0.0000,   -inf],
+                [0.0000, 1.6094, 2.3026, 2.3026, 1.6094, 0.0000],
+                [0.0000, 1.7918, 2.7081, 2.9957, 2.7081, 1.7918],
+                [0.0000, 1.9459, 3.0445, 3.5553, 3.5553, 3.0445]])
     """ 
     return logmultinomialcoeff(n,k,n-k)
 
 def comb(n,k):
     r"""
-    $\binom{n}{k}$
+    $\binom{n}{k} = \frac{n!}{k!(n-k)!}$
     
     Args:
         n (torch.Tensor): $n$.
         k (torch.Tensor): $k$.
 
     Returns:
-        nchoosek (torch.Tensor): $\log \binom{n}{k}$.
+        y (torch.Tensor): $\binom{n}{k}$.
 
     Examples:
-        >>> comb(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])
-        tensor([[ 1,  0,  0,  0,  0],
-                [ 2,  1,  0,  0,  0],
-                [ 2,  2,  1,  0,  0],
-                [ 4,  6,  4,  1,  0],
-                [ 4,  9,  9,  4,  1],
-                [ 6, 15, 20, 15,  6],
-                [ 7, 21, 35, 35, 21]])
+        >>> comb(torch.arange(8)[:,None],torch.arange(6)[None,:])
+        tensor([[ 1,  0,  0,  0,  0,  0],
+                [ 1,  1,  0,  0,  0,  0],
+                [ 1,  2,  1,  0,  0,  0],
+                [ 1,  3,  3,  1,  0,  0],
+                [ 1,  4,  6,  4,  1,  0],
+                [ 1,  5, 10, 10,  5,  1],
+                [ 1,  6, 15, 20, 15,  6],
+                [ 1,  7, 21, 35, 35, 21]])
     """ 
-    return multinomialcoeff(n,k,n-k)
+    return multinomialcoeff(n,k,n-k).round().to(int)

@@ -14,6 +14,8 @@ from .utils import (
     get_torch_rng,
     logmultinomialcoeff,
     multinomialcoeff,
+    logfactorial,
+    factorial,
     logcomb,
     comb,
     )
