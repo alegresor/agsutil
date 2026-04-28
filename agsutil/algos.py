@@ -480,7 +480,7 @@ def lm_opt(
         success = ~fails.to(bool) # (Q_lams,R)
         deltaf = torch.nan*torch.ones((Q_lams,R,T),device=device)
         gammas = torch.ones((Q_lams,1,1),device=device)*gamma[None,:,:] # (Q_lams,R,T)
-        deltaf[success] = torch.linalg.solve_triangular(L[success].transpose(dim0=-2,dim1=-1),torch.linalg.solve_triangular(L[success],gammas[success,...,None],upper=False),upper=True)[...,0] # (Q_lam,R,T)
+        deltaf[success] = torch.linalg.solve_triangular(L[success].transpose(dim0=-2,dim1=-1),torch.linalg.solve_triangular(L[success],gammas[success].unsqueeze(-1),upper=False),upper=True)[...,0] # (Q_lam,R,T)
         thetasf = torch.ones((Q_lams,1,1),device=device)*theta.reshape((1,R,T)) # (Q_lam,R,T)
         thetasf_new = torch.nan*torch.ones((Q_alphas,Q_lams,R,T),device=device)
         thetasf_new[:,success] = thetasf[success]-signminimize*alpha_factors_i[:,None,None]*deltaf[success]
