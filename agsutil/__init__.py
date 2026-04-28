@@ -8,10 +8,14 @@ from .algos import (
 from .utils import (
     print_data_signatures,
     Timer, 
-    logcomb,
     to_unitary_qr,
     to_unitary_expskewh,
     from_unitary_expskewh,
+    get_torch_rng,
+    logmultinomialcoeff,
+    multinomialcoeff,
+    logcomb,
+    comb,
     )
 from .plots import (
     mpl_setup,

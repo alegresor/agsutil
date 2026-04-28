@@ -108,40 +108,6 @@ class Timer():
             tdelta = self.t0.elapsed_time(self.tend)/1000
         return float(tdelta)
 
-def logcomb(n,k):
-    r"""
-    $\log \binom{n}{k}$
-    
-    Args:
-        n (torch.Tensor): $n$.
-        k (torch.Tensor): $k$.
-
-    Returns:
-        nchoosek (torch.Tensor): $\log \binom{n}{k}$.
-
-    Examples:
-        >>> logcomb(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])
-        tensor([[0.0000,   -inf,   -inf,   -inf,   -inf],
-                [0.6931, 0.0000,   -inf,   -inf,   -inf],
-                [1.0986, 1.0986, 0.0000,   -inf,   -inf],
-                [1.3863, 1.7918, 1.3863, 0.0000,   -inf],
-                [1.6094, 2.3026, 2.3026, 1.6094, 0.0000],
-                [1.7918, 2.7081, 2.9957, 2.7081, 1.7918],
-                [1.9459, 3.0445, 3.5553, 3.5553, 3.0445]])
-        >>> torch.exp(logcomb(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])).to(int)
-        tensor([[ 1,  0,  0,  0,  0],
-                [ 2,  1,  0,  0,  0],
-                [ 2,  2,  1,  0,  0],
-                [ 4,  6,  4,  1,  0],
-                [ 4,  9,  9,  4,  1],
-                [ 6, 15, 20, 15,  6],
-                [ 7, 21, 35, 35, 21]])
-    """ 
-    assert (n>=0).all()
-    assert (k>=0).all()
-    # assert (k<=n).all()
-    return torch.lgamma(n+1)-torch.lgamma(k+1)-torch.lgamma(n-k+1)
-
 def to_unitary_expskewh(theta, n, complex_case=False):
     r"""
     Transform to a unitary matrix using the exponential of a skew Hermitian matrix.
@@ -442,3 +408,133 @@ def to_unitary_qr(A):
     Q,R = torch.linalg.qr(A)
     phases = torch.sgn(torch.diagonal(R,dim1=-2,dim2=-1))
     return Q*phases.unsqueeze(-2)
+
+
+def get_torch_rng(seed=None, device=None):
+    r"""
+    Get a `torch.Generator()` a random seed when `seed=None` or a fixed seeed when `seed` is an int.  
+    This is necessary because torch.Generator() uses a fixed default seed.  
+
+
+    Args:
+        seed (Union[None,int]): Random seed. If None. 
+        device (torch.device): Device on which to place the generator.
+    
+    Returns: 
+        rng (torch.Generator): The random number generator
+    """
+    if device is None: 
+        device = torch.get_default_device()
+    if seed is None: 
+        rng = torch.Generator(device=device)
+        rng.seed()
+    else:
+        rng = torch.Generator(device=device).manual_seed(seed)
+    return rng
+
+def logmultinomialcoeff(n, *ks):
+    r"""
+    $\log \binom{n}{k_1,\dots,k_m} = \log \left(\frac{n!}{k_1! \cdots k_m!}  = \sum_{i=1}^n \log i - \sum_{j=1}^m \sum_{i=1}^{k_j} \log i$
+    
+    Args:
+        n (torch.Tensor): $n$.
+        *ks (Tuple): $k_1,\dots,k_m$ where $k_j$ is a `torch.Tensor`.
+
+    Returns:
+        y (torch.Tensor): $\log \binom{n}{k_1,\dots,k_m}$.
+
+    Examples:
+        >>> n = torch.arange(8)
+        >>> k1 = torch.arange(2)
+        >>> k2 = torch.arange(2,4)
+        >>> k3 = torch.arange(4,6)
+        >>> logmultinomialcoeff(n[None,:],k1[:,None],k2[:,None],k3[:,None])
+        tensor([[-3.8712e+00, -3.8712e+00, -3.1781e+00, -2.0794e+00, -6.9315e-01,
+                  9.1629e-01,  2.7081e+00,  4.6540e+00],
+                [-6.5793e+00, -6.5793e+00, -5.8861e+00, -4.7875e+00, -3.4012e+00,
+                 -1.7918e+00,  8.8818e-16,  1.9459e+00]])
+    """ 
+    assert (n>=0).all()
+    m = len(ks) 
+    assert ((k>=0).all() for k in ks)
+    y = torch.lgamma(n+1)
+    for k in ks:
+        y = y-torch.lgamma(k+1)
+    return y
+
+def multinomialcoeff(n, *ks):
+    r"""
+    $\binom{n}{k_1,\dots,k_m} = \left(\frac{n!}{k_1! \cdots k_m!}$
+    
+    Args:
+        n (torch.Tensor): $n$.
+        *ks (Tuple): $k_1,\dots,k_m$ where $k_j$ is a `torch.Tensor`.
+
+    Returns:
+        y (torch.Tensor): $\binom{n}{k_1,\dots,k_m}$.
+
+    Examples:
+        >>> multinomialcoeff(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])
+        tensor([[   1,    0,    0,    0,    0],
+                [   2,    1,    0,    0,    0],
+                [   6,    2,    1,    0,    0],
+                [  24,   12,    4,    1,    0],
+                [ 119,   59,   19,    4,    1],
+                [ 720,  360,  120,   30,    6],
+                [5040, 2520,  840,  210,   42]])
+    """ 
+    return torch.exp(logmultinomialcoeff(n,*ks)).to(int)
+
+def logcomb(n,k):
+    r"""
+    $\log \binom{n}{k}$
+    
+    Args:
+        n (torch.Tensor): $n$.
+        k (torch.Tensor): $k$.
+
+    Returns:
+        nchoosek (torch.Tensor): $\log \binom{n}{k}$.
+
+    Examples:
+        >>> logcomb(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])
+        tensor([[0.0000,   -inf,   -inf,   -inf,   -inf],
+                [0.6931, 0.0000,   -inf,   -inf,   -inf],
+                [1.0986, 1.0986, 0.0000,   -inf,   -inf],
+                [1.3863, 1.7918, 1.3863, 0.0000,   -inf],
+                [1.6094, 2.3026, 2.3026, 1.6094, 0.0000],
+                [1.7918, 2.7081, 2.9957, 2.7081, 1.7918],
+                [1.9459, 3.0445, 3.5553, 3.5553, 3.0445]])
+        >>> torch.exp(logcomb(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])).to(int)
+        tensor([[ 1,  0,  0,  0,  0],
+                [ 2,  1,  0,  0,  0],
+                [ 2,  2,  1,  0,  0],
+                [ 4,  6,  4,  1,  0],
+                [ 4,  9,  9,  4,  1],
+                [ 6, 15, 20, 15,  6],
+                [ 7, 21, 35, 35, 21]])
+    """ 
+    return logmultinomialcoeff(n,k,n-k)
+
+def comb(n,k):
+    r"""
+    $\binom{n}{k}$
+    
+    Args:
+        n (torch.Tensor): $n$.
+        k (torch.Tensor): $k$.
+
+    Returns:
+        nchoosek (torch.Tensor): $\log \binom{n}{k}$.
+
+    Examples:
+        >>> comb(torch.arange(1,8)[:,None],torch.arange(1,6)[None,:])
+        tensor([[ 1,  0,  0,  0,  0],
+                [ 2,  1,  0,  0,  0],
+                [ 2,  2,  1,  0,  0],
+                [ 4,  6,  4,  1,  0],
+                [ 4,  9,  9,  4,  1],
+                [ 6, 15, 20, 15,  6],
+                [ 7, 21, 35, 35, 21]])
+    """ 
+    return multinomialcoeff(n,k,n-k)
