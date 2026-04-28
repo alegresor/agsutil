@@ -19,6 +19,8 @@ from .utils import (
     logcomb,
     comb,
     enumerate_sums,
+    len_enumerate_sums,
+    enumerate_partitions,
     )
 from .plots import (
     mpl_setup,

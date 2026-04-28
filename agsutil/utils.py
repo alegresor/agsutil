@@ -579,7 +579,7 @@ def enumerate_sums(s, t):
         t (int): Number of items to allocate. 
     
     Returns: 
-        g (Generator): Genrator of tuples of length $s$. 
+        g (generator): Genrator of tuples of length $s$. 
 
     Examples: 
     
@@ -591,7 +591,7 @@ def enumerate_sums(s, t):
         (1, 2)
         (2, 1)
         (3, 0)
-        >>> comb(torch.tensor(3+2-1),torch.tensor(2-1)).item()
+        >>> len_enumerate_sums(2,3)
         4
 
     3 non-negative integers that sum to 2 
@@ -604,9 +604,69 @@ def enumerate_sums(s, t):
         (1, 0, 1)
         (1, 1, 0)
         (2, 0, 0)
-        >>> comb(torch.tensor(2+3-1),torch.tensor(3-1)).item()
+        >>> len_enumerate_sums(3,2)
         6
     """ 
     for combo in itertools.combinations(range(t+s-1),s-1):
         bars = (-1,)+combo+(t+s-1,)
         yield tuple(bars[i+1]-bars[i]-1 for i in range(s))
+
+def len_enumerate_sums(s, t):
+    r"""
+    $\binom{t+s-1}{s-1} = \frac{(t+s-1)!}{t!(s-1)!}$, the number of ways to choose $s \in \mathbb{N}_0$ non-negative integers which sum to $t \in \mathbb{N}_0$.  
+
+    Args:
+        s (int): Number of integers to choose. 
+        t (int): Number of items to allocate. 
+    
+    Returns: 
+        y (int): $\binom{t+s-1}{s-1}$. 
+
+    Examples: 
+    
+    2 non-negative integers that sum to 3 
+
+        >>> len_enumerate_sums(2,3)
+        4
+
+    3 non-negative integers that sum to 2 
+
+        >>> len_enumerate_sums(3,2)
+        6
+    """ 
+    return comb(torch.tensor(t+s-1),torch.tensor(s-1)).item()
+
+def enumerate_partitions(n, max_val=None):
+    r"""
+    Enumerate all partitions sizes of $n$ objects.
+
+    Args:
+        n (int): Number of objects
+    
+    Returns: 
+        g (generator): Generator of partitions. 
+    
+    Examples: 
+        >>> for p in enumerate_partitions(3):
+        ...     print(p)
+        [3]
+        [2, 1]
+        [1, 1, 1]
+        >>> for p in enumerate_partitions(5):
+        ...     print(p)
+        [5]
+        [4, 1]
+        [3, 2]
+        [3, 1, 1]
+        [2, 2, 1]
+        [2, 1, 1, 1]
+        [1, 1, 1, 1, 1]
+    """
+    if max_val is None:
+        max_val = n
+    if n == 0:
+        yield []
+        return
+    for i in range(min(n,max_val),0,-1):
+        for p in enumerate_partitions(n-i,i):
+            yield [i]+p
