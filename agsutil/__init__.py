@@ -9,6 +9,7 @@ from .autograd import (
     gradb,
     jacfwdb,
     jacrevb,
+    jvpb,
 )
 from .utils import (
     print_data_signatures,
