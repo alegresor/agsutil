@@ -8,6 +8,7 @@ from .algos import (
 from .autograd import (
     gradb,
     jacfwdb,
+    jacrevb,
 )
 from .utils import (
     print_data_signatures,
