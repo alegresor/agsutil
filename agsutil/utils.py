@@ -413,12 +413,12 @@ def to_unitary_qr(A):
 
 def get_torch_rng(seed=None, device=None):
     r"""
-    Get a `torch.Generator()` a random seed when `seed=None` or a fixed seeed when `seed` is an int.  
+    Get a `torch.Generator()` with a random seed when `seed=None` or a fixed seed when `seed` is an int.  
     This is necessary because torch.Generator() uses a fixed default seed.  
 
 
     Args:
-        seed (Union[None,int]): Random seed. If None. 
+        seed (Union[None,int,torch.Generator()]): Random seed. 
         device (torch.device): Device on which to place the generator.
     
     Returns: 
@@ -426,7 +426,9 @@ def get_torch_rng(seed=None, device=None):
     """
     if device is None: 
         device = torch.get_default_device()
-    if seed is None: 
+    if isinstance(seed,torch.Generator):
+        rng = seed 
+    elif seed is None: 
         rng = torch.Generator(device=device)
         rng.seed()
     else:

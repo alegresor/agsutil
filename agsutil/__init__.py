@@ -5,6 +5,9 @@ from .algos import (
     minres,
     minres_qlp_cs,
     )
+from .autograd import (
+    gradb,
+)
 from .utils import (
     print_data_signatures,
     Timer, 

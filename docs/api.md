@@ -4,6 +4,10 @@
 
 ::: agsutil.algos
 
+## `torch` autograd utils 
+
+::: agsutil.autograd
+
 ## Misc utils
 
 ::: agsutil.utils
