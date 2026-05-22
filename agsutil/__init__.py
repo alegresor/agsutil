@@ -7,6 +7,7 @@ from .algos import (
     )
 from .autograd import (
     gradb,
+    jacfwdb,
 )
 from .utils import (
     print_data_signatures,

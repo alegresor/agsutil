@@ -124,64 +124,64 @@ def jacfwdb(f, *x, batched_kwargs={}, batchdims=0, chunk_size=None):
         >>> torch.allclose(jacy,torch.arange(2,5)[:,None]*x**torch.arange(1,4)[:,None])
         True
 
-        # >>> f = lambda x,z: (x**2*z**2).sum(-1)
-        # >>> x = torch.rand(5,generator=rng) 
-        # >>> z = torch.rand(5,generator=rng) 
-        # >>> grady_x,grady_z,y = gradb(f,x,z)
-        # >>> grady_x.shape 
-        # torch.Size([5])
-        # >>> grady_z.shape 
-        # torch.Size([5])
-        # >>> y.shape
-        # torch.Size([])
-        # >>> torch.allclose(y,f(x,z))
-        # True
-        # >>> torch.allclose(grady_x,2*x*z**2)
-        # True
-        # >>> torch.allclose(grady_z,x**2*2*z)
-        # True
-
-        # >>> f = lambda x: (x**2).sum(-1)
-        # >>> x = torch.rand(2,3,4,5,generator=rng) 
-        # >>> grady,y = gradb(f,x,batchdims=3)
-        # >>> grady.shape 
-        # torch.Size([2, 3, 4, 5])
-        # >>> y.shape 
-        # torch.Size([2, 3, 4])
-        # >>> torch.allclose(y,f(x))
-        # True
-        # >>> torch.allclose(grady,2*x)
-        # True
-
-        # >>> f = lambda x,z: (x**2*z**2).sum(-1)
-        # >>> x = torch.rand(2,3,4,5,generator=rng) 
-        # >>> z = torch.rand(2,3,4,5,generator=rng) 
-        # >>> grady_x,grady_z,y = gradb(f,x,z,batchdims=3)
-        # >>> grady_x.shape 
-        # torch.Size([2, 3, 4, 5])
-        # >>> grady_z.shape 
-        # torch.Size([2, 3, 4, 5])
-        # >>> y.shape
-        # torch.Size([2, 3, 4])
-        # >>> torch.allclose(y,f(x,z))
-        # True
-        # >>> torch.allclose(grady_x,2*x*z**2)
-        # True
-        # >>> torch.allclose(grady_z,x**2*2*z)
-        # True
+        >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum(-3)
+        >>> x = torch.rand(5,generator=rng) 
+        >>> z = torch.rand(5,generator=rng) 
+        >>> jacy_x,jacy_z,y = jacfwdb(f,x,z)
+        >>> jacy_x.shape 
+        torch.Size([2, 2, 5])
+        >>> jacy_z.shape 
+        torch.Size([2, 2, 5])
+        >>> y.shape
+        torch.Size([2, 2])
+        >>> torch.allclose(y,f(x,z))
+        True
+        >>> torch.allclose(jacy_x,torch.arange(2,4)[:,None,None]*x**torch.arange(1,3)[:,None,None]*z**torch.arange(3,5)[None,:,None])
+        True
+        >>> torch.allclose(jacy_z,x**torch.arange(2,4)[:,None,None]*torch.arange(3,5)[None,:,None]*z**torch.arange(2,4)[None,:,None])
+        True
         
-        # >>> f = lambda x,z: (x**2*z**2).sum((-2,-1))
-        # >>> x = torch.rand(2,3,4,5,generator=rng) 
-        # >>> z = torch.rand(2,3,4,5,generator=rng) 
-        # >>> grady_x,y = gradb(f,x,batched_kwargs={"z":z},batchdims=2)
-        # >>> grady_x.shape 
-        # torch.Size([2, 3, 4, 5])
-        # >>> y.shape
-        # torch.Size([2, 3])
-        # >>> torch.allclose(y,f(x,z))
-        # True
-        # >>> torch.allclose(grady_x,2*x*z**2)
-        # True
+        >>> f = lambda x: (x[...,None]**torch.arange(2,5)).sum(-2)
+        >>> x = torch.rand(3,4,5,generator=rng) 
+        >>> jacy,y = jacfwdb(f,x,batchdims=2)
+        >>> jacy.shape 
+        torch.Size([3, 4, 3, 5])
+        >>> y.shape 
+        torch.Size([3, 4, 3])
+        >>> torch.allclose(y,f(x))
+        True
+        >>> torch.allclose(jacy,torch.arange(2,5)[:,None]*x[...,None,:]**torch.arange(1,4)[:,None])
+        True
+
+        >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum(-3)
+        >>> x = torch.rand(3,4,5,generator=rng) 
+        >>> z = torch.rand(3,4,5,generator=rng) 
+        >>> jacy_x,jacy_z,y = jacfwdb(f,x,z,batchdims=2)
+        >>> jacy_x.shape 
+        torch.Size([3, 4, 2, 2, 5])
+        >>> jacy_z.shape 
+        torch.Size([3, 4, 2, 2, 5])
+        >>> y.shape
+        torch.Size([3, 4, 2, 2])
+        >>> torch.allclose(y,f(x,z))
+        True
+        >>> torch.allclose(jacy_x,torch.arange(2,4)[:,None,None]*x[...,None,None,:]**torch.arange(1,3)[:,None,None]*z[...,None,None,:]**torch.arange(3,5)[None,:,None])
+        True
+        >>> torch.allclose(jacy_z,x[...,None,None,:]**torch.arange(2,4)[:,None,None]*torch.arange(3,5)[None,:,None]*z[...,None,None,:]**torch.arange(2,4)[None,:,None])
+        True
+        
+        >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum((-4,-3))
+        >>> x = torch.rand(3,4,5,6,generator=rng) 
+        >>> z = torch.rand(3,4,5,6,generator=rng) 
+        >>> jacy_x,y = jacfwdb(f,x,batched_kwargs={"z":z},batchdims=2)
+        >>> jacy_x.shape 
+        torch.Size([3, 4, 2, 2, 5, 6])
+        >>> y.shape
+        torch.Size([3, 4, 2, 2])
+        >>> torch.allclose(y,f(x,z))
+        True
+        >>> torch.allclose(jacy_x,torch.arange(2,4)[:,None,None,None]*x[...,None,None,:,:]**torch.arange(1,3)[:,None,None,None]*z[...,None,None,:,:]**torch.arange(3,5)[None,:,None,None])
+        True
     """
     lenx = len(x) 
     assert len(x)>=1
