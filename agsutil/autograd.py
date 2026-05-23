@@ -104,7 +104,6 @@ def gradb(f, *x, batch_kwargs={}, batchdims=0, chunk_size=None):
         y = f(*x,**batch_kwargs)
         return y,y
     gradfwrap = torch.func.grad(fwrap,argnums=tuple(i for i in range(len(x))),has_aux=True)
-    batch_kwargs_shapes = [(batch_kwargs[k].shape[:batchdims]) for k in batch_kwargs_keys]
     gradfwrapvec = torch.vmap(gradfwrap,in_dims=(0,)*(lenx+len_batch_kwargs),chunk_size=chunk_size)
     x_input = [xi.flatten(end_dim=batchdims-1) if batchdims>0 else xi[None,...] for xi in x]
     batch_kwargs_vals_input = [batch_kwargs[key].flatten(end_dim=batchdims-1) if batchdims>0 else batch_kwargs[key][None,...] for key in batch_kwargs_keys]
@@ -218,7 +217,6 @@ def jacfwdb(f, *x, batch_kwargs={}, batchdims=0, chunk_size=None):
         y = f(*x,**batch_kwargs)
         return y,y
     jacfwrap = torch.func.jacfwd(fwrap,argnums=tuple(i for i in range(len(x))),has_aux=True)
-    batch_kwargs_shapes = [(batch_kwargs[k].shape[:batchdims]) for k in batch_kwargs_keys]
     jacfwrapvec = torch.vmap(jacfwrap,in_dims=(0,)*(lenx+len_batch_kwargs),chunk_size=chunk_size)
     x_input = [xi.flatten(end_dim=batchdims-1) if batchdims>0 else xi[None,...] for xi in x]
     batch_kwargs_vals_input = [batch_kwargs[key].flatten(end_dim=batchdims-1) if batchdims>0 else batch_kwargs[key][None,...] for key in batch_kwargs_keys]
@@ -332,7 +330,6 @@ def jacrevb(f, *x, batch_kwargs={}, batchdims=0, chunk_size=None):
         y = f(*x,**batch_kwargs)
         return y,y
     jacfwrap = torch.func.jacrev(fwrap,argnums=tuple(i for i in range(len(x))),has_aux=True)
-    batch_kwargs_shapes = [(batch_kwargs[k].shape[:batchdims]) for k in batch_kwargs_keys]
     jacfwrapvec = torch.vmap(jacfwrap,in_dims=(0,)*(lenx+len_batch_kwargs),chunk_size=chunk_size)
     x_input = [xi.flatten(end_dim=batchdims-1) if batchdims>0 else xi[None,...] for xi in x]
     batch_kwargs_vals_input = [batch_kwargs[key].flatten(end_dim=batchdims-1) if batchdims>0 else batch_kwargs[key][None,...] for key in batch_kwargs_keys]
@@ -342,14 +339,15 @@ def jacrevb(f, *x, batch_kwargs={}, batchdims=0, chunk_size=None):
     else:
         return *(jacy.reshape(batch_shape+list(jacy.shape[1:])) for jacy in jacys),y.reshape(batch_shape+list(y.shape[1:]))
 
-def jvpb(f, x, p, batchdims=0, chunk_size=None):
+def jvpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
     r"""
     Batched `torch.func.jvp` with function evaluation (forward-mode auto-diff)
 
     Args:
         f (callable): Function to compute `torch.func.jvp` of.
-        x (Tuple): (batched) `Torch.Tensor` inputs.
-        p (Tuple): (batched) `Torch.Tensor` primals.
+        x (Tuple): (batched) `Torch.Tensor` primals.
+        p (Tuple): (batched) `Torch.Tensor` tangents.
+        batch_kwargs (dict): (batched) `Torch.Tensor` items whose jacobians will not be computed.
         batchdims (int): number of batch dimensions 
         chunk_size (int): to be passed into `torch.func.vmap`. 
     
@@ -374,51 +372,50 @@ def jvpb(f, x, p, batchdims=0, chunk_size=None):
         >>> torch.allclose(jacy,jacfwdb(f,x)[0]@p)
         True
 
-        # >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum(-3)
-        # >>> x = torch.rand(5,generator=rng) 
-        # >>> z = torch.rand(5,generator=rng) 
-        # >>> jacy_x,jacy_z,y = jacrevb(f,x,z)
-        # >>> jacy_x.shape 
-        # torch.Size([2, 2, 5])
-        # >>> jacy_z.shape 
-        # torch.Size([2, 2, 5])
-        # >>> y.shape
-        # torch.Size([2, 2])
-        # >>> torch.allclose(y,f(x,z))
-        # True
-        # >>> torch.allclose(jacy_x,torch.arange(2,4)[:,None,None]*x**torch.arange(1,3)[:,None,None]*z**torch.arange(3,5)[None,:,None])
-        # True
-        # >>> torch.allclose(jacy_z,x**torch.arange(2,4)[:,None,None]*torch.arange(3,5)[None,:,None]*z**torch.arange(2,4)[None,:,None])
-        # True
+        >>> f = lambda x,z: (x[...,:,None,None]**torch.arange(2,5)*z[...,None,:,None]**torch.arange(1,4)).sum((-3,-2))
+        >>> x = torch.rand(5,generator=rng)
+        >>> z = torch.rand(4,generator=rng)
+        >>> p = torch.rand(5,generator=rng)
+        >>> q = torch.rand(4,generator=rng)
+        >>> jvpy,y = jvpb(f,(x,z),(p,q))
+        >>> jvpy.shape
+        torch.Size([3])
+        >>> y.shape
+        torch.Size([3])
+        >>> torch.allclose(y,f(x,z))
+        True
+        >>> jac_x,jac_z,_ = jacfwdb(f,x,z)
+        >>> torch.allclose(jvpy,jac_x@p+jac_z@q)
+        True
         
-        # >>> f = lambda x: (x[...,None]**torch.arange(2,5)).sum(-2)
-        # >>> x = torch.rand(3,4,5,generator=rng) 
-        # >>> jacy,y = jacrevb(f,x,batchdims=2)
-        # >>> jacy.shape 
-        # torch.Size([3, 4, 3, 5])
-        # >>> y.shape 
-        # torch.Size([3, 4, 3])
-        # >>> torch.allclose(y,f(x))
-        # True
-        # >>> torch.allclose(jacy,torch.arange(2,5)[:,None]*x[...,None,:]**torch.arange(1,4)[:,None])
-        # True
+        >>> f = lambda x: (x[...,None]**torch.arange(2,5)).sum(-2)
+        >>> x = torch.rand(6,4,5,generator=rng)
+        >>> p = torch.rand(6,4,5,generator=rng)
+        >>> jacy,y = jvpb(f,(x,),(p,),batchdims=2)
+        >>> jacy.shape 
+        torch.Size([6, 4, 3])
+        >>> y.shape 
+        torch.Size([6, 4, 3])
+        >>> torch.allclose(y,f(x))
+        True
+        >>> torch.allclose(jacy,(jacfwdb(f,x,batchdims=2)[0]*p[...,None,:]).sum(-1))
+        True
 
-        # >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum(-3)
-        # >>> x = torch.rand(3,4,5,generator=rng) 
-        # >>> z = torch.rand(3,4,5,generator=rng) 
-        # >>> jacy_x,jacy_z,y = jacrevb(f,x,z,batchdims=2)
-        # >>> jacy_x.shape 
-        # torch.Size([3, 4, 2, 2, 5])
-        # >>> jacy_z.shape 
-        # torch.Size([3, 4, 2, 2, 5])
-        # >>> y.shape
-        # torch.Size([3, 4, 2, 2])
-        # >>> torch.allclose(y,f(x,z))
-        # True
-        # >>> torch.allclose(jacy_x,torch.arange(2,4)[:,None,None]*x[...,None,None,:]**torch.arange(1,3)[:,None,None]*z[...,None,None,:]**torch.arange(3,5)[None,:,None])
-        # True
-        # >>> torch.allclose(jacy_z,x[...,None,None,:]**torch.arange(2,4)[:,None,None]*torch.arange(3,5)[None,:,None]*z[...,None,None,:]**torch.arange(2,4)[None,:,None])
-        # True
+        >>> f = lambda x,z: (x[...,:,None,None]**torch.arange(2,5)*z[...,None,:,None]**torch.arange(1,4)).sum((-3,-2))
+        >>> x = torch.rand(6,7,5,generator=rng)
+        >>> z = torch.rand(6,7,4,generator=rng)
+        >>> p = torch.rand(6,7,5,generator=rng)
+        >>> q = torch.rand(6,7,4,generator=rng)
+        >>> jvpy,y = jvpb(f,(x,z),(p,q),batchdims=2)
+        >>> jvpy.shape
+        torch.Size([6, 7, 3])
+        >>> y.shape
+        torch.Size([6, 7, 3])
+        >>> torch.allclose(y,f(x,z))
+        True
+        >>> jac_x,jac_z,_ = jacfwdb(f,x,z,batchdims=2)
+        >>> torch.allclose(jvpy,(jac_x*p[...,None,:]).sum(-1)+(jac_z*q[...,None,:]).sum(-1))
+        True
         
         # >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum((-4,-3))
         # >>> x = torch.rand(3,4,5,6,generator=rng) 
@@ -439,15 +436,18 @@ def jvpb(f, x, p, batchdims=0, chunk_size=None):
     batch_shape = list(x[0].shape[:batchdims])
     for i,xi in enumerate(x): assert list(xi.shape[:batchdims])==batch_shape, "x input %d has shape = %s, but expected first dims to match batch_shape = %s"%(i,list(xi.shape),list(batch_shape))
     for i,pi in enumerate(p): assert list(pi.shape[:batchdims])==batch_shape, "p input %d has shape = %s, but expected first dims to match batch_shape = %s"%(i,list(xi.shape),list(batch_shape))
-    def jvpfwrap(*xp):
-        lenxp = len(xp)
-        x,p = xp[:(lenxp//2)],xp[(lenxp//2):]
-        return torch.func.jvp(f,x,p)
-    jvpfwrapvec = torch.vmap(jvpfwrap,in_dims=(0,)*2*lenx,chunk_size=chunk_size)
+    for k,v in batch_kwargs.items(): assert list(v.shape[:batchdims])==batch_shape, "batch_kwargs['%s'].shape = %s, but expected first dims to match batch_shape = %s"%(k,list(v.shape),list(batch_shape))
+    len_batch_kwargs = len(batch_kwargs) 
+    batch_kwargs_keys = list(batch_kwargs.keys())
+    def jvpfwrap(*inputs):
+        x,p,batch_kwargs_vals = inputs[:lenx],inputs[lenx:(2*lenx)],inputs[(2*lenx):]
+        return torch.func.jvp(lambda *x: f(*x,*batch_kwargs_vals),x,p)
+    jvpfwrapvec = torch.vmap(jvpfwrap,in_dims=(0,)*(2*lenx+len_batch_kwargs),chunk_size=chunk_size)
     x_input = [xi.flatten(end_dim=batchdims-1) if batchdims>0 else xi[None,...] for xi in x]
     p_input = [pi.flatten(end_dim=batchdims-1) if batchdims>0 else pi[None,...] for pi in p]
-    y,jvpys = jvpfwrapvec(*x_input,*p_input)
+    batch_kwargs_vals_input = [batch_kwargs[key].flatten(end_dim=batchdims-1) if batchdims>0 else batch_kwargs[key][None,...] for key in batch_kwargs_keys]
+    y,jvpy = jvpfwrapvec(*x_input,*p_input,*batch_kwargs_vals_input)
     if batchdims==0:
-        return jvpys[0],y[0]
+        return jvpy[0],y[0]
     else:
-        return *(jvpy.reshape(batch_shape+list(jvpy.shape[1:])) for jvpy in jvpys),y.reshape(batch_shape+list(y.shape[1:]))
+        return jvpy.reshape(batch_shape+list(jvpy.shape[1:])),y.reshape(batch_shape+list(y.shape[1:]))
