@@ -249,7 +249,6 @@ def jacfwdb(f, *x, batch_kwargs={}, batchdims=0, chunk_size=None):
         torch.Size([3, 4, 2, 2])
         >>> v.shape
         torch.Size([3, 4, 2, 2])
-
     """
     lenx = len(x) 
     assert len(x)>=1
@@ -540,6 +539,76 @@ def jvpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> (jac_x,jac_z),_ = jacfwdb(f,x,z,batchdims=2)
         >>> torch.allclose(jvpy,(jac_x*p[...,None,:]).sum(-1))
         True
+        
+        >>> def f(x):
+        ...     y = (x[...,:,None]**torch.arange(2,5)).sum(-2)
+        ...     u = (x[...,:,None]**torch.arange(3,6)).sum(-2)
+        ...     v = (x[...,:,None]**torch.arange(4,7)).sum(-2)
+        ...     return y,u,v
+        >>> x = torch.rand(5,generator=rng)
+        >>> p = torch.rand(5,generator=rng)
+        >>> (jvpy,jvpu,jvpv),(y,u,v) = jvpb(f,(x,),(p,))
+        >>> jvpy.shape
+        torch.Size([3])
+        >>> jvpu.shape
+        torch.Size([3])
+        >>> jvpv.shape
+        torch.Size([3])
+        >>> y.shape
+        torch.Size([3])
+        >>> u.shape
+        torch.Size([3])
+        >>> v.shape
+        torch.Size([3])
+        >>> torch.allclose(y,f(x,z)[0])
+        False
+        >>> torch.allclose(u,f(x,z)[1])
+        True
+        >>> torch.allclose(v,f(x,z)[2])
+        True
+        >>> ((jacy_x,),(jacu_x,),(jacv_x,)),_ = jacfwdb(f,x,z,batchdims=2)
+        >>> torch.allclose(jvpy,(jacy_x*p[...,None,:]).sum(-1))
+        True
+        >>> torch.allclose(jvpu,(jacu_x*p[...,None,:]).sum(-1))
+        True
+        >>> torch.allclose(jvpv,(jacv_x*p[...,None,:]).sum(-1))
+        True
+        
+        >>> def f(x,z):
+        ...     y = (x[...,:,None,None]**torch.arange(2,5)*z[...,None,:,None]**torch.arange(1,4)).sum((-3,-2))
+        ...     u = (x[...,:,None,None]**torch.arange(3,6)*z[...,None,:,None]**torch.arange(2,5)).sum((-3,-2))
+        ...     v = (x[...,:,None,None]**torch.arange(4,7)*z[...,None,:,None]**torch.arange(3,6)).sum((-3,-2))
+        ...     return y,u,v
+        >>> x = torch.rand(6,7,5,generator=rng)
+        >>> z = torch.rand(6,7,4,generator=rng)
+        >>> p = torch.rand(6,7,5,generator=rng)
+        >>> q = torch.rand(6,7,4,generator=rng)
+        >>> (jvpy,jvpu,jvpv),(y,u,v) = jvpb(f,(x,z),(p,q),batchdims=2)
+        >>> jvpy.shape
+        torch.Size([6, 7, 3])
+        >>> jvpu.shape
+        torch.Size([6, 7, 3])
+        >>> jvpv.shape
+        torch.Size([6, 7, 3])
+        >>> y.shape
+        torch.Size([6, 7, 3])
+        >>> u.shape
+        torch.Size([6, 7, 3])
+        >>> v.shape
+        torch.Size([6, 7, 3])
+        >>> torch.allclose(y,f(x,z)[0])
+        True
+        >>> torch.allclose(u,f(x,z)[1])
+        True
+        >>> torch.allclose(v,f(x,z)[2])
+        True
+        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,x,z,batchdims=2)
+        >>> torch.allclose(jvpy,(jacy_x*p[...,None,:]).sum(-1)+(jacy_z*q[...,None,:]).sum(-1))
+        True
+        >>> torch.allclose(jvpu,(jacu_x*p[...,None,:]).sum(-1)+(jacu_z*q[...,None,:]).sum(-1))
+        True
+        >>> torch.allclose(jvpv,(jacv_x*p[...,None,:]).sum(-1)+(jacv_z*q[...,None,:]).sum(-1))
+        True
     """
     lenx = len(x) 
     assert len(x)>=1
@@ -558,10 +627,16 @@ def jvpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
     p_input = [pi.flatten(end_dim=batchdims-1) if batchdims>0 else pi[None,...] for pi in p]
     batch_kwargs_vals_input = [batch_kwargs[key].flatten(end_dim=batchdims-1) if batchdims>0 else batch_kwargs[key][None,...] for key in batch_kwargs_keys]
     y,jvpy = jvpfwrapvec(*x_input,*p_input,*batch_kwargs_vals_input)
-    if batchdims==0:
-        return jvpy[0],y[0]
+    if isinstance(y,torch.Tensor):
+        if batchdims==0:
+            return jvpy[0],y[0]
+        else:
+            return jvpy.reshape(batch_shape+list(jvpy.shape[1:])),y.reshape(batch_shape+list(y.shape[1:]))
     else:
-        return jvpy.reshape(batch_shape+list(jvpy.shape[1:])),y.reshape(batch_shape+list(y.shape[1:]))
+        if batchdims==0:
+            return tuple(jvpyk[0] for jvpyk in jvpy),tuple(yk[0] for yk in y)
+        else:
+            return tuple(jvpyk.reshape(batch_shape+list(jvpyk.shape[1:])) for jvpyk in jvpy),tuple(yk.reshape(batch_shape+list(yk.shape[1:])) for yk in y)
 
 def vjpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
     r"""
