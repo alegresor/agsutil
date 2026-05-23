@@ -1,12 +1,12 @@
 import torch 
 
-def gradb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
+def gradb(f, x, bkwargs={}, bdims=0, chunk_size=None):
     r"""
     Batched `torch.func.grad` and function evaluation 
 
     Args:
         f (callable): Function to compute `torch.func.grad` of. 
-        x (Tuple): (batched) `Torch.Tensor` items whose gradients will be computed.
+        x (Union[torch.Tensor,Tuple]): (batched) `Torch.Tensor` items whose gradients will be computed.
         bkwargs (dict): (batched) `Torch.Tensor` items whose gradients will not be computed.
         bdims (int): number of batch dimensions 
         chunk_size (int): to be passed into `torch.func.vmap`. 
@@ -34,7 +34,7 @@ def gradb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         >>> f = lambda x,z: (x**2*z**2).sum(-1)
         >>> x = torch.rand(5,generator=rng) 
         >>> z = torch.rand(5,generator=rng) 
-        >>> (grady_x,grady_z),y = gradb(f,x,z)
+        >>> (grady_x,grady_z),y = gradb(f,(x,z))
         >>> grady_x.shape 
         torch.Size([5])
         >>> grady_z.shape 
@@ -63,7 +63,7 @@ def gradb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         >>> f = lambda x,z: (x**2*z**2).sum(-1)
         >>> x = torch.rand(3,4,5,generator=rng) 
         >>> z = torch.rand(3,4,5,generator=rng) 
-        >>> (grady_x,grady_z),y = gradb(f,x,z,bdims=2)
+        >>> (grady_x,grady_z),y = gradb(f,(x,z),bdims=2)
         >>> grady_x.shape 
         torch.Size([3, 4, 5])
         >>> grady_z.shape 
@@ -90,7 +90,8 @@ def gradb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         >>> torch.allclose(grady_x,2*x*z**2)
         True
     """
-    lenx = len(x) 
+    if isinstance(x,torch.Tensor): x = (x,)
+    lenx = len(x)
     assert len(x)>=1
     batch_shape = list(x[0].shape[:bdims])
     for i,xi in enumerate(x): assert list(xi.shape[:bdims])==batch_shape, "input %d has shape = %s, but expected first dims to match batch_shape = %s"%(i,list(xi.shape),list(batch_shape))
@@ -113,13 +114,13 @@ def gradb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
     else:
         return tuple(grady.reshape(batch_shape+list(grady.shape[1:])) for grady in gradys),y.reshape(batch_shape+list(y.shape[1:]))
 
-def jacfwdb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
+def jacfwdb(f, x, bkwargs={}, bdims=0, chunk_size=None):
     r"""
     Batched `torch.func.jacfwd` with function evaluation 
 
     Args:
         f (callable): Function to compute `torch.func.jacfwd` of. 
-        x (Tuple): (batched) `Torch.Tensor` items whose jacobians will be computed.
+        x (Union[torch.Tensor,Tuple]): (batched) `Torch.Tensor` items whose jacobians will be computed.
         bkwargs (dict): (batched) `Torch.Tensor` items whose jacobians will not be computed.
         bdims (int): number of batch dimensions 
         chunk_size (int): to be passed into `torch.func.vmap`. 
@@ -147,7 +148,7 @@ def jacfwdb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum(-3)
         >>> x = torch.rand(5,generator=rng) 
         >>> z = torch.rand(5,generator=rng) 
-        >>> (jacy_x,jacy_z),y = jacfwdb(f,x,z)
+        >>> (jacy_x,jacy_z),y = jacfwdb(f,(x,z))
         >>> jacy_x.shape 
         torch.Size([2, 2, 5])
         >>> jacy_z.shape 
@@ -176,7 +177,7 @@ def jacfwdb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum(-3)
         >>> x = torch.rand(3,4,5,generator=rng) 
         >>> z = torch.rand(3,4,5,generator=rng) 
-        >>> (jacy_x,jacy_z),y = jacfwdb(f,x,z,bdims=2)
+        >>> (jacy_x,jacy_z),y = jacfwdb(f,(x,z),bdims=2)
         >>> jacy_x.shape 
         torch.Size([3, 4, 2, 2, 5])
         >>> jacy_z.shape 
@@ -230,7 +231,7 @@ def jacfwdb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         ...     return y,u,v
         >>> x = torch.rand(3,4,5,generator=rng) 
         >>> z = torch.rand(3,4,5,generator=rng) 
-        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),(y,u,v) = jacfwdb(f,x,z,bdims=2)
+        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),(y,u,v) = jacfwdb(f,(x,z),bdims=2)
         >>> jacy_x.shape
         torch.Size([3, 4, 2, 2, 5])
         >>> jacy_z.shape
@@ -250,6 +251,7 @@ def jacfwdb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         >>> v.shape
         torch.Size([3, 4, 2, 2])
     """
+    if isinstance(x,torch.Tensor): x = (x,)
     lenx = len(x) 
     assert len(x)>=1
     batch_shape = list(x[0].shape[:bdims])
@@ -279,13 +281,13 @@ def jacfwdb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         else:
             return tuple(tuple(jacyk.reshape(batch_shape+list(jacyk.shape[1:])) for jacyk in jacy) for jacy in jacys),tuple(yk.reshape(batch_shape+list(yk.shape[1:])) for yk in y)
 
-def jacrevb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
+def jacrevb(f, x, bkwargs={}, bdims=0, chunk_size=None):
     r"""
     Batched `torch.func.jacrev` with function evaluation 
 
     Args:
         f (callable): Function to compute `torch.func.jacrev` of. 
-        x (Tuple): (batched) `Torch.Tensor` items whose jacobians will be computed.
+        x (Tuple): (Union[torch.Tensor,Tuple]) `Torch.Tensor` items whose jacobians will be computed.
         bkwargs (dict): (batched) `Torch.Tensor` items whose jacobians will not be computed.
         bdims (int): number of batch dimensions 
         chunk_size (int): to be passed into `torch.func.vmap`. 
@@ -313,7 +315,7 @@ def jacrevb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum(-3)
         >>> x = torch.rand(5,generator=rng) 
         >>> z = torch.rand(5,generator=rng) 
-        >>> (jacy_x,jacy_z),y = jacrevb(f,x,z)
+        >>> (jacy_x,jacy_z),y = jacrevb(f,(x,z))
         >>> jacy_x.shape 
         torch.Size([2, 2, 5])
         >>> jacy_z.shape 
@@ -342,7 +344,7 @@ def jacrevb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum(-3)
         >>> x = torch.rand(3,4,5,generator=rng) 
         >>> z = torch.rand(3,4,5,generator=rng) 
-        >>> (jacy_x,jacy_z),y = jacrevb(f,x,z,bdims=2)
+        >>> (jacy_x,jacy_z),y = jacrevb(f,(x,z),bdims=2)
         >>> jacy_x.shape 
         torch.Size([3, 4, 2, 2, 5])
         >>> jacy_z.shape 
@@ -396,7 +398,7 @@ def jacrevb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         ...     return y,u,v
         >>> x = torch.rand(3,4,5,generator=rng) 
         >>> z = torch.rand(3,4,5,generator=rng) 
-        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),(y,u,v) = jacrevb(f,x,z,bdims=2)
+        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),(y,u,v) = jacrevb(f,(x,z),bdims=2)
         >>> jacy_x.shape
         torch.Size([3, 4, 2, 2, 5])
         >>> jacy_z.shape
@@ -416,6 +418,7 @@ def jacrevb(f, *x, bkwargs={}, bdims=0, chunk_size=None):
         >>> v.shape
         torch.Size([3, 4, 2, 2])
     """
+    if isinstance(x,torch.Tensor): x = (x,)
     lenx = len(x) 
     assert len(x)>=1
     batch_shape = list(x[0].shape[:bdims])
@@ -451,8 +454,8 @@ def jvpb(f, x, p, bkwargs={}, bdims=0, chunk_size=None):
 
     Args:
         f (callable): Function to compute `torch.func.jvp` of.
-        x (Tuple): (batched) `Torch.Tensor` primals.
-        p (Tuple): (batched) `Torch.Tensor` tangents.
+        x (Union[torch.Tensor,Tuple]): (batched) `Torch.Tensor` primals.
+        p (Union[torch.Tensor,Tuple]): (batched) `Torch.Tensor` tangents.
         bkwargs (dict): (batched) `Torch.Tensor` items whose jacobians will not be computed.
         bdims (int): number of batch dimensions 
         chunk_size (int): to be passed into `torch.func.vmap`. 
@@ -491,7 +494,7 @@ def jvpb(f, x, p, bkwargs={}, bdims=0, chunk_size=None):
         torch.Size([3])
         >>> torch.allclose(y,f(x,z))
         True
-        >>> (jac_x,jac_z),_ = jacfwdb(f,x,z)
+        >>> (jac_x,jac_z),_ = jacfwdb(f,(x,z))
         >>> torch.allclose(jvpy,jac_x@p+jac_z@q)
         True
         
@@ -521,7 +524,7 @@ def jvpb(f, x, p, bkwargs={}, bdims=0, chunk_size=None):
         torch.Size([6, 7, 3])
         >>> torch.allclose(y,f(x,z))
         True
-        >>> (jac_x,jac_z),_ = jacfwdb(f,x,z,bdims=2)
+        >>> (jac_x,jac_z),_ = jacfwdb(f,(x,z),bdims=2)
         >>> torch.allclose(jvpy,(jac_x*p[...,None,:]).sum(-1)+(jac_z*q[...,None,:]).sum(-1))
         True
         
@@ -536,7 +539,7 @@ def jvpb(f, x, p, bkwargs={}, bdims=0, chunk_size=None):
         torch.Size([6, 7, 3])
         >>> torch.allclose(y,f(x,z))
         True
-        >>> (jac_x,jac_z),_ = jacfwdb(f,x,z,bdims=2)
+        >>> (jac_x,jac_z),_ = jacfwdb(f,(x,z),bdims=2)
         >>> torch.allclose(jvpy,(jac_x*p[...,None,:]).sum(-1))
         True
         
@@ -602,7 +605,7 @@ def jvpb(f, x, p, bkwargs={}, bdims=0, chunk_size=None):
         True
         >>> torch.allclose(v,f(x,z)[2])
         True
-        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,x,z,bdims=2)
+        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,(x,z),bdims=2)
         >>> torch.allclose(jvpy,(jacy_x*p[...,None,:]).sum(-1)+(jacy_z*q[...,None,:]).sum(-1))
         True
         >>> torch.allclose(jvpu,(jacu_x*p[...,None,:]).sum(-1)+(jacu_z*q[...,None,:]).sum(-1))
@@ -647,8 +650,8 @@ def vjpb(f, x, p, bkwargs={}, bdims=0, chunk_size=None):
 
     Args:
         f (callable): Function to compute `torch.func.vjp` of.
-        x (Tuple): (batched) `Torch.Tensor` primals.
-        p (Tuple): (batched) `Torch.Tensor` tangents.
+        x (Union[torch.Tensor,Tuple]): (batched) `Torch.Tensor` primals.
+        p (Union[torch.Tensor,Tuple]): (batched) `Torch.Tensor` tangents.
         bkwargs (dict): (batched) `Torch.Tensor` items whose jacobians will not be computed.
         bdims (int): number of batch dimensions 
         chunk_size (int): to be passed into `torch.func.vmap`. 
@@ -700,7 +703,7 @@ def vjpb(f, x, p, bkwargs={}, bdims=0, chunk_size=None):
         True
         >>> torch.allclose(v,f(x,z)[1])
         False
-        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,x,z)
+        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,(x,z))
         >>> torch.allclose(vjp_x,p@jacy_x+q@jacu_x+r@jacv_x)
         True
         >>> torch.allclose(vjp_z,p@jacy_z+q@jacu_z+r@jacv_z)
@@ -745,7 +748,7 @@ def vjpb(f, x, p, bkwargs={}, bdims=0, chunk_size=None):
         True
         >>> torch.allclose(v,f(x,z)[1])
         False
-        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,x,z,bdims=1)
+        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,(x,z),bdims=1)
         >>> torch.allclose(vjp_x,(p[...,None]*jacy_x).sum(-2)+(q[...,None]*jacu_x).sum(-2)+(r[...,None]*jacv_x).sum(-2))
         True
         >>> torch.allclose(vjp_z,(p[...,None]*jacy_z).sum(-2)+(q[...,None]*jacu_z).sum(-2)+(r[...,None]*jacv_z).sum(-2))
@@ -774,7 +777,7 @@ def vjpb(f, x, p, bkwargs={}, bdims=0, chunk_size=None):
         True
         >>> torch.allclose(v,f(x,z)[1])
         False
-        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,x,z,bdims=1)
+        >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,(x,z),bdims=1)
         >>> torch.allclose(vjp_x,(p[...,None]*jacy_x).sum(-2)+(q[...,None]*jacu_x).sum(-2)+(r[...,None]*jacv_x).sum(-2))
         True
     """
