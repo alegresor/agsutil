@@ -468,7 +468,7 @@ def jvpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> f = lambda x: (x[...,None]**torch.arange(2,5)).sum(-2)
         >>> x = torch.rand(5,generator=rng)
         >>> p = torch.rand(5,generator=rng)
-        >>> jvpy,y = jvpb(f,x,p)
+        >>> (jvpy,),y = jvpb(f,x,p)
         >>> jvpy.shape 
         torch.Size([3])
         >>> y.shape 
@@ -484,7 +484,7 @@ def jvpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> z = torch.rand(4,generator=rng)
         >>> p = torch.rand(5,generator=rng)
         >>> q = torch.rand(4,generator=rng)
-        >>> jvpy,y = jvpb(f,(x,z),(p,q))
+        >>> (jvpy,),y = jvpb(f,(x,z),(p,q))
         >>> jvpy.shape
         torch.Size([3])
         >>> y.shape
@@ -498,7 +498,7 @@ def jvpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> f = lambda x: (x[...,None]**torch.arange(2,5)).sum(-2)
         >>> x = torch.rand(6,4,5,generator=rng)
         >>> p = torch.rand(6,4,5,generator=rng)
-        >>> jvpy,y = jvpb(f,x,p,batchdims=2)
+        >>> (jvpy,),y = jvpb(f,x,p,batchdims=2)
         >>> jvpy.shape 
         torch.Size([6, 4, 3])
         >>> y.shape 
@@ -514,7 +514,7 @@ def jvpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> z = torch.rand(6,7,4,generator=rng)
         >>> p = torch.rand(6,7,5,generator=rng)
         >>> q = torch.rand(6,7,4,generator=rng)
-        >>> jvpy,y = jvpb(f,(x,z),(p,q),batchdims=2)
+        >>> (jvpy,),y = jvpb(f,(x,z),(p,q),batchdims=2)
         >>> jvpy.shape
         torch.Size([6, 7, 3])
         >>> y.shape
@@ -529,7 +529,7 @@ def jvpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> x = torch.rand(6,7,5,generator=rng)
         >>> z = torch.rand(6,7,4,generator=rng)
         >>> p = torch.rand(6,7,5,generator=rng)
-        >>> jvpy,y = jvpb(f,x,p,batch_kwargs={"z":z},batchdims=2)
+        >>> (jvpy,),y = jvpb(f,x,p,batch_kwargs={"z":z},batchdims=2)
         >>> jvpy.shape
         torch.Size([6, 7, 3])
         >>> y.shape
@@ -629,11 +629,12 @@ def jvpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
     p_input = [pi.flatten(end_dim=batchdims-1) if batchdims>0 else pi[None,...] for pi in p]
     batch_kwargs_vals_input = [batch_kwargs[key].flatten(end_dim=batchdims-1) if batchdims>0 else batch_kwargs[key][None,...] for key in batch_kwargs_keys]
     y,jvpy = jvpfwrapvec(*x_input,*p_input,*batch_kwargs_vals_input)
+    if isinstance(jvpy,torch.Tensor): jvpy = (jvpy,)
     if isinstance(y,torch.Tensor):
         if batchdims==0:
-            return jvpy[0],y[0]
+            return tuple(jvpyk[0] for jvpyk in jvpy),y[0]
         else:
-            return jvpy.reshape(batch_shape+list(jvpy.shape[1:])),y.reshape(batch_shape+list(y.shape[1:]))
+            return tuple(jvpyk.reshape(batch_shape+list(jvpyk.shape[1:])) for jvpyk in jvpy),y.reshape(batch_shape+list(y.shape[1:]))
     else:
         if batchdims==0:
             return tuple(jvpyk[0] for jvpyk in jvpy),tuple(yk[0] for yk in y)
@@ -663,15 +664,15 @@ def vjpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> f = lambda x: (x[...,None]**torch.arange(2,5)).sum(-2)
         >>> x = torch.rand(5,generator=rng)
         >>> p = torch.rand(3,generator=rng)
-        >>> vjpy,y = vjpb(f,x,p)
-        >>> vjpy.shape 
+        >>> (vjpx,),y = vjpb(f,x,p)
+        >>> vjpx.shape 
         torch.Size([5])
         >>> y.shape 
         torch.Size([3])
         >>> torch.allclose(y,f(x))
         True
         >>> (jac_x,),_ = jacfwdb(f,x)
-        >>> torch.allclose(vjpy,p@jac_x)
+        >>> torch.allclose(vjpx,p@jac_x)
         True
 
         >>> def f(x,z):
@@ -684,10 +685,10 @@ def vjpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> p = torch.rand(3,generator=rng)
         >>> q = torch.rand(3,generator=rng)
         >>> r = torch.rand(3,generator=rng)
-        >>> vjpy_x,vjpy_z,y,u,v = vjpb(f,(x,z),(p,q,r))
-        >>> vjpy_x.shape
+        >>> (vjp_x,vjp_z),(y,u,v) = vjpb(f,(x,z),(p,q,r))
+        >>> vjp_x.shape
         torch.Size([5])
-        >>> vjpy_z.shape
+        >>> vjp_z.shape
         torch.Size([6])
         >>> y.shape
         torch.Size([3])
@@ -700,23 +701,23 @@ def vjpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> torch.allclose(v,f(x,z)[1])
         False
         >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,x,z)
-        >>> torch.allclose(vjpy_x,p@jacy_x+q@jacu_x+r@jacv_x)
+        >>> torch.allclose(vjp_x,p@jacy_x+q@jacu_x+r@jacv_x)
         True
-        >>> torch.allclose(vjpy_z,p@jacy_z+q@jacu_z+r@jacv_z)
+        >>> torch.allclose(vjp_z,p@jacy_z+q@jacu_z+r@jacv_z)
         True
         
         >>> f = lambda x: (x[...,None]**torch.arange(2,5)).sum(-2)
         >>> x = torch.rand(7,5,generator=rng)
         >>> p = torch.rand(7,3,generator=rng)
-        >>> vjpy,y = vjpb(f,x,p,batchdims=1)
-        >>> vjpy.shape 
+        >>> (vjpx,),y = vjpb(f,x,p,batchdims=1)
+        >>> vjpx.shape 
         torch.Size([7, 5])
         >>> y.shape 
         torch.Size([7, 3])
         >>> torch.allclose(y,f(x))
         True
         >>> (jac_x,),_ = jacfwdb(f,x,batchdims=1)
-        >>> torch.allclose(vjpy,(p[...,None]*jac_x).sum(-2))
+        >>> torch.allclose(vjpx,(p[...,None]*jac_x).sum(-2))
         True
 
         >>> def f(x,z):
@@ -729,10 +730,10 @@ def vjpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> p = torch.rand(7,3,generator=rng)
         >>> q = torch.rand(7,3,generator=rng)
         >>> r = torch.rand(7,3,generator=rng)
-        >>> vjpy_x,vjpy_z,y,u,v = vjpb(f,(x,z),(p,q,r),batchdims=1)
-        >>> vjpy_x.shape
+        >>> (vjp_x,vjp_z),(y,u,v) = vjpb(f,(x,z),(p,q,r),batchdims=1)
+        >>> vjp_x.shape
         torch.Size([7, 5])
-        >>> vjpy_z.shape
+        >>> vjp_z.shape
         torch.Size([7, 6])
         >>> y.shape
         torch.Size([7, 3])
@@ -745,23 +746,9 @@ def vjpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> torch.allclose(v,f(x,z)[1])
         False
         >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,x,z,batchdims=1)
-        >>> torch.allclose(vjpy_x,(p[...,None]*jacy_x).sum(-2)+(q[...,None]*jacu_x).sum(-2)+(r[...,None]*jacv_x).sum(-2))
+        >>> torch.allclose(vjp_x,(p[...,None]*jacy_x).sum(-2)+(q[...,None]*jacu_x).sum(-2)+(r[...,None]*jacv_x).sum(-2))
         True
-        >>> torch.allclose(vjpy_z,(p[...,None]*jacy_z).sum(-2)+(q[...,None]*jacu_z).sum(-2)+(r[...,None]*jacv_z).sum(-2))
-        True
-        
-        >>> f = lambda x: (x[...,None]**torch.arange(2,5)).sum(-2)
-        >>> x = torch.rand(7,5,generator=rng)
-        >>> p = torch.rand(7,3,generator=rng)
-        >>> vjpy,y = vjpb(f,x,p,batchdims=1)
-        >>> vjpy.shape 
-        torch.Size([7, 5])
-        >>> y.shape 
-        torch.Size([7, 3])
-        >>> torch.allclose(y,f(x))
-        True
-        >>> (jac_x,),_ = jacfwdb(f,x,batchdims=1)
-        >>> torch.allclose(vjpy,(p[...,None]*jac_x).sum(-2))
+        >>> torch.allclose(vjp_z,(p[...,None]*jacy_z).sum(-2)+(q[...,None]*jacu_z).sum(-2)+(r[...,None]*jacv_z).sum(-2))
         True
 
         >>> def f(x,z):
@@ -774,8 +761,8 @@ def vjpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> p = torch.rand(7,3,generator=rng)
         >>> q = torch.rand(7,3,generator=rng)
         >>> r = torch.rand(7,3,generator=rng)
-        >>> vjpy_x,y,u,v = vjpb(f,x,(p,q,r),batch_kwargs={"z":z},batchdims=1)
-        >>> vjpy_x.shape
+        >>> (vjp_x,),(y,u,v) = vjpb(f,x,(p,q,r),batch_kwargs={"z":z},batchdims=1)
+        >>> vjp_x.shape
         torch.Size([7, 5])
         >>> y.shape
         torch.Size([7, 3])
@@ -788,7 +775,7 @@ def vjpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> torch.allclose(v,f(x,z)[1])
         False
         >>> ((jacy_x,jacy_z),(jacu_x,jacu_z),(jacv_x,jacv_z)),_ = jacfwdb(f,x,z,batchdims=1)
-        >>> torch.allclose(vjpy_x,(p[...,None]*jacy_x).sum(-2)+(q[...,None]*jacu_x).sum(-2)+(r[...,None]*jacv_x).sum(-2))
+        >>> torch.allclose(vjp_x,(p[...,None]*jacy_x).sum(-2)+(q[...,None]*jacu_x).sum(-2)+(r[...,None]*jacv_x).sum(-2))
         True
     """
     if isinstance(x,torch.Tensor): x = (x,)
@@ -813,8 +800,13 @@ def vjpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
     p_input = [pi.flatten(end_dim=batchdims-1) if batchdims>0 else pi[None,...] for pi in p]
     batch_kwargs_vals_input = [batch_kwargs[key].flatten(end_dim=batchdims-1) if batchdims>0 else batch_kwargs[key][None,...] for key in batch_kwargs_keys]
     y,vjpys = vjpfwrapvec(*x_input,*p_input,*batch_kwargs_vals_input)
-    if isinstance(y,torch.Tensor): y = (y,)
-    if batchdims==0:
-        return *(vjpy[0] for vjpy in vjpys),*(yk[0] for yk in y)
+    if isinstance(y,torch.Tensor):
+        if batchdims==0:
+            return (vjpy[0] for vjpy in vjpys),y[0]
+        else:
+            return (vjpy.reshape(batch_shape+list(vjpy.shape[1:])) for vjpy in vjpys),y.reshape(batch_shape+list(y.shape[1:]))
     else:
-        return *(vjpy.reshape(batch_shape+list(vjpy.shape[1:])) for vjpy in vjpys),*(yk.reshape(batch_shape+list(yk.shape[1:])) for yk in y)
+        if batchdims==0:
+            return (vjpy[0] for vjpy in vjpys),(yk[0] for yk in y)
+        else:
+            return (vjpy.reshape(batch_shape+list(vjpy.shape[1:])) for vjpy in vjpys),(yk.reshape(batch_shape+list(yk.shape[1:])) for yk in y)
