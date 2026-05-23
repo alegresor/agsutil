@@ -417,18 +417,20 @@ def jvpb(f, x, p, batch_kwargs={}, batchdims=0, chunk_size=None):
         >>> torch.allclose(jvpy,(jac_x*p[...,None,:]).sum(-1)+(jac_z*q[...,None,:]).sum(-1))
         True
         
-        # >>> f = lambda x,z: (x[...,None,None]**torch.arange(2,4)[:,None]*z[...,None,None]**torch.arange(3,5)[None,:]).sum((-4,-3))
-        # >>> x = torch.rand(3,4,5,6,generator=rng) 
-        # >>> z = torch.rand(3,4,5,6,generator=rng) 
-        # >>> jacy_x,y = jacrevb(f,x,batch_kwargs={"z":z},batchdims=2)
-        # >>> jacy_x.shape 
-        # torch.Size([3, 4, 2, 2, 5, 6])
-        # >>> y.shape
-        # torch.Size([3, 4, 2, 2])
-        # >>> torch.allclose(y,f(x,z))
-        # True
-        # >>> torch.allclose(jacy_x,torch.arange(2,4)[:,None,None,None]*x[...,None,None,:,:]**torch.arange(1,3)[:,None,None,None]*z[...,None,None,:,:]**torch.arange(3,5)[None,:,None,None])
-        # True
+        >>> f = lambda x,z: (x[...,:,None,None]**torch.arange(2,5)*z[...,None,:,None]**torch.arange(1,4)).sum((-3,-2))
+        >>> x = torch.rand(6,7,5,generator=rng)
+        >>> z = torch.rand(6,7,4,generator=rng)
+        >>> p = torch.rand(6,7,5,generator=rng)
+        >>> jvpy,y = jvpb(f,(x,),(p,),batch_kwargs={"z":z},batchdims=2)
+        >>> jvpy.shape
+        torch.Size([6, 7, 3])
+        >>> y.shape
+        torch.Size([6, 7, 3])
+        >>> torch.allclose(y,f(x,z))
+        True
+        >>> jac_x,jac_z,_ = jacfwdb(f,x,z,batchdims=2)
+        >>> torch.allclose(jvpy,(jac_x*p[...,None,:]).sum(-1))
+        True
     """
     lenx = len(x) 
     assert len(x)>=1
