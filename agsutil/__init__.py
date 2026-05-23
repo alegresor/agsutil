@@ -10,6 +10,7 @@ from .autograd import (
     jacfwdb,
     jacrevb,
     jvpb,
+    vjpb
 )
 from .utils import (
     print_data_signatures,
