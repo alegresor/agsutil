@@ -587,7 +587,7 @@ def pcg(
         >>> torch.set_default_dtype(torch.float64)
         >>> rng = torch.Generator().manual_seed(7)
 
-    Real-symmetric example with column vector $b$ 
+    Real SPD example with column vector $b$ 
         
         >>> n = 5
         >>> L = torch.rand(n,n,generator=rng).tril()
@@ -613,7 +613,7 @@ def pcg(
         >>> torch.allclose(x_pcg,x_true)
         True
     
-    Complex-Hermitian example with column vector $b$ 
+    Complex SPD example with column vector $b$ 
         
         >>> n = 5
         >>> L = torch.randn(n,n,generator=rng,dtype=torch.complex128).tril(-1)+torch.rand(n,generator=rng).diag()
@@ -674,7 +674,7 @@ def pcg(
         >>> torch.allclose(X_pcg,X_true)
         True
 
-    Tri-diagonal $A$ with storage-saving multiplication function 
+    Low-rank plus diagonal $A$ with storage-saving multiplication function 
         
         >>> n = 5
         >>> k = 3
@@ -714,7 +714,7 @@ def pcg(
         >>> torch.allclose(X_pcg,X_true)
         True
 
-    Batched tri-diagonal $A$ with storage-saving multiplication function 
+    Batched low-rank plus diagonal $A$ with storage-saving multiplication function 
 
         >>> n = 100
         >>> k = 3
@@ -729,12 +729,14 @@ def pcg(
         ...     return torch.einsum("...ij,...jk->...ik",Q,torch.einsum("...ji,...jk->...ik",Q,x))+delta[...,None]*x
         >>> torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
         True
-        >>> X_pcg,data = pcg(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None,store_all_data=True)
+        >>> X_pcg,data = pcg(A_mult,B,verbose=None,iters=200,verbose_times=False,store_data_iters=None,store_all_data=True)
             iter i     | losses_quantiles                                          
                        | 5         | 25        | 50        | 75        | 90        
             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
             0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
-            25         | 1.8e-01   | 2.1e-01   | 2.5e-01   | 3.1e-01   | 5.1e-01   
+            10         | 8.1e-01   | 1.1e+00   | 1.4e+00   | 1.7e+00   | 1.8e+00   
+            20         | 7.0e-01   | 9.1e-01   | 1.1e+00   | 1.3e+00   | 1.4e+00   
+            30         | 3.4e-01   | 4.2e-01   | 5.1e-01   | 6.0e-01   | 7.1e-01   
             ...   
         >>> X_pcg.shape
         torch.Size([2, 6, 4, 100, 3])
@@ -742,24 +744,24 @@ def pcg(
         True
         >>> print_data_signatures(data)
             data['x'].shape = (2, 6, 4, 100, 3)
-            data['iterrange'].shape = (224,)
-            data['times'].shape = (224,)
+            data['iterrange'].shape = (201,)
+            data['times'].shape = (201,)
             data['losses_quantiles']
-                data['losses_quantiles']['0'].shape = (224,)
-                data['losses_quantiles']['1'].shape = (224,)
-                data['losses_quantiles']['5'].shape = (224,)
-                data['losses_quantiles']['10'].shape = (224,)
-                data['losses_quantiles']['25'].shape = (224,)
-                data['losses_quantiles']['40'].shape = (224,)
-                data['losses_quantiles']['50'].shape = (224,)
-                data['losses_quantiles']['60'].shape = (224,)
-                data['losses_quantiles']['75'].shape = (224,)
-                data['losses_quantiles']['90'].shape = (224,)
-                data['losses_quantiles']['95'].shape = (224,)
-                data['losses_quantiles']['99'].shape = (224,)
-                data['losses_quantiles']['100'].shape = (224,)
-            data['xs'].shape = (224, 2, 6, 4, 100, 3)
-            data['losses'].shape = (224, 2, 6, 4, 3)
+                data['losses_quantiles']['0'].shape = (201,)
+                data['losses_quantiles']['1'].shape = (201,)
+                data['losses_quantiles']['5'].shape = (201,)
+                data['losses_quantiles']['10'].shape = (201,)
+                data['losses_quantiles']['25'].shape = (201,)
+                data['losses_quantiles']['40'].shape = (201,)
+                data['losses_quantiles']['50'].shape = (201,)
+                data['losses_quantiles']['60'].shape = (201,)
+                data['losses_quantiles']['75'].shape = (201,)
+                data['losses_quantiles']['90'].shape = (201,)
+                data['losses_quantiles']['95'].shape = (201,)
+                data['losses_quantiles']['99'].shape = (201,)
+                data['losses_quantiles']['100'].shape = (201,)
+            data['xs'].shape = (201, 2, 6, 4, 100, 3)
+            data['losses'].shape = (201, 2, 6, 4, 3)
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
             torch.get_default_dtype() = %s, but pcg often requires high precision updates. We recommend using:
