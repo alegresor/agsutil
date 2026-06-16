@@ -529,6 +529,376 @@ def lm_opt(
         else:
             return theta,*args,data
 
+def pcg(
+        A,
+        B,
+        X0 = None,
+        precond_solver = None,
+        iters = None,
+        residtol = None,
+        verbose = False, 
+        verbose_indent = 4,
+        quantiles_losses = [0,1,5,10,25,40,50,60,75,90,95,99,100],
+        verbose_quantiles_losses = [5,25,50,75,90],
+        verbose_times = True, 
+        warn = True,
+        store_data_iters = False, 
+        store_all_data = False,
+        ):
+    r"""
+    [Preconditioned conjugate gradient algorithm](https://en.wikipedia.org/wiki/Conjugate_gradient_method#The_preconditioned_conjugate_gradient_method) for solving linear systems $AX=B$ where $A$ is positive semi-definite
+
+    Args:
+        A (Union[torch.Tensor,callable]): Matrix `A` with shape `(...,n,n)`, or  
+            `callable(A)` where `A(X)` should return the batch matrix multiplication of `A` and `X`,  
+        B (torch.Tensor): Right hand side tensor $B$ with shape `(...,n,k)`
+        X0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
+        precond_solver (Union[torch.Tensor,callable]): Preconditioning solver, either a matrix `M` with shape `(...,n,n)`, or 
+            `callable(M)` where `M(X)` should return the batch matrix multiplication of `M` and `X`
+        iters (int): number of minres iterations, defaults to `5n`.
+        residtol (float): Non-negative tolerance on the maximum residual for early stopping, defaults to `1e-12` for `torch.float64` and `2.5e-4` for `torch.float32`.
+        verbose (int): Controls logging verbosity
+
+            - If `True`, perform logging. 
+            - If a positive int, only log every `verbose` iterations. 
+            - If `None`, set to a reasonable positive int based on the maximum number of iterations
+            - If `False`, don't log. 
+        
+        verbose_indent (int): Non-negative number of indentation spaces for logging.
+        quantiles_losses (list): Loss quantiles to record.
+        verbose_quantiles_losses (list): Loss quantiles to show in verbose log.
+        verbose_times (bool): If `False`, do not show the times in the verbose log. This is mostly for testing where timing is not reproducible. 
+        warn (bool): If `False`, then suppress warnings.
+        store_data_iters (int): Controls storage iterations with the same options as verbose. If `store_data_iters==0`, then the data is not collected or returned. 
+
+            - If `True`, store every iteration. 
+            - If a positive int, only store every `store_data_iters` iterations. 
+            - If `None`, set to a reasonable positive int based on the maximum number of iterations
+            - If `False`, don't store data, and do not return data 
+
+        store_all_data (bool): If `True`, store the `x` values as well as the metrics. 
+
+    Returns:
+        x (torch.Tensor): Optimized $X$.
+        data (dict): Iteration data, only returned when `store_data_iters>0`
+
+    Examples:
+
+        >>> torch.set_default_dtype(torch.float64)
+        >>> rng = torch.Generator().manual_seed(7)
+
+    Real-symmetric example with column vector $b$ 
+        
+        >>> n = 5
+        >>> L = torch.rand(n,n,generator=rng).tril()
+        >>> A = L@L.T
+        >>> b = torch.rand(n,generator=rng)
+        >>> x_true = torch.linalg.solve(A,b[...,None])[...,0]
+        >>> x_true
+        tensor([3445.9564, -777.4224, 3706.6588, -663.9501,   23.4735])
+        >>> torch.allclose(A@x_true-b,torch.zeros_like(b))
+        True
+        >>> x_pcg = pcg(A,b[...,None],verbose=None,verbose_times=False)[...,0]
+            iter i     | losses_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 9.0e-01   | 9.0e-01   | 9.0e-01   | 9.0e-01   | 9.0e-01   
+            2          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            3          | 3.7e+00   | 3.7e+00   | 3.7e+00   | 3.7e+00   | 3.7e+00   
+            4          | 1.5e+00   | 1.5e+00   | 1.5e+00   | 1.5e+00   | 1.5e+00   
+            5          | 4.0e-08   | 4.0e-08   | 4.0e-08   | 4.0e-08   | 4.0e-08   
+            6          | 1.8e-12   | 1.8e-12   | 1.8e-12   | 1.8e-12   | 1.8e-12   
+            7          | 3.2e-13   | 3.2e-13   | 3.2e-13   | 3.2e-13   | 3.2e-13   
+        >>> torch.allclose(x_pcg,x_true)
+        True
+    
+    Complex-Hermitian example with column vector $b$ 
+        
+        >>> n = 5
+        >>> L = torch.randn(n,n,generator=rng,dtype=torch.complex128).tril(-1)+torch.rand(n,generator=rng).diag()
+        >>> A = L@L.adjoint()
+        >>> b = torch.rand(n,dtype=torch.complex128,generator=rng)
+        >>> x_true = torch.linalg.solve(A,b[...,None])[...,0]
+        >>> x_true
+        tensor([ 139.4855-450.7870j,  221.0729+203.4796j, -220.4211+69.1949j,
+                 107.2952+6.4764j,    4.0780-7.4403j])
+        >>> torch.allclose(A@x_true-b,torch.zeros_like(b))
+        True
+        >>> x_pcg = pcg(A,b[...,None],verbose=None,verbose_times=False)[...,0]
+            iter i     | losses_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 1.4e+00   | 1.4e+00   | 1.4e+00   | 1.4e+00   | 1.4e+00   
+            2          | 1.2e+00   | 1.2e+00   | 1.2e+00   | 1.2e+00   | 1.2e+00   
+            3          | 9.4e-01   | 9.4e-01   | 9.4e-01   | 9.4e-01   | 9.4e-01   
+            4          | 6.5e-02   | 6.5e-02   | 6.5e-02   | 6.5e-02   | 6.5e-02   
+            5          | 1.9e-08   | 1.9e-08   | 1.9e-08   | 1.9e-08   | 1.9e-08   
+            6          | 2.7e-10   | 2.7e-10   | 2.7e-10   | 2.7e-10   | 2.7e-10   
+            7          | 1.1e-11   | 1.1e-11   | 1.1e-11   | 1.1e-11   | 1.1e-11   
+            8          | 6.0e-14   | 6.0e-14   | 6.0e-14   | 6.0e-14   | 6.0e-14   
+        >>> torch.allclose(x_pcg,x_true)
+        True
+
+    Matrix $B$
+        
+        >>> n = 5
+        >>> k = 3
+        >>> L = torch.rand(n,n,generator=rng).tril()
+        >>> A = L@L.T
+        >>> B = torch.rand(n,k,generator=rng)
+        >>> X_true = torch.linalg.solve(A,B)
+        >>> X_true
+        tensor([[-4.7668e+03, -1.6571e+03, -1.2753e+03],
+                [-2.7778e+03, -9.6609e+02, -7.4529e+02],
+                [ 1.3876e+04,  4.8280e+03,  3.7223e+03],
+                [ 1.4911e+00,  3.0229e-01, -8.1048e-01],
+                [-4.1842e+01, -1.4783e+01, -1.1143e+01]])
+        >>> torch.allclose(A@X_true-B,torch.zeros_like(B))
+        True
+        >>> X_pcg = pcg(A,B,verbose=None,verbose_times=False)
+            iter i     | losses_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 3.7e-01   | 4.2e-01   | 4.8e-01   | 5.2e-01   | 5.4e-01   
+            2          | 2.3e-01   | 3.1e-01   | 4.2e-01   | 8.5e-01   | 1.1e+00   
+            3          | 2.1e-01   | 2.1e-01   | 2.2e-01   | 2.7e+00   | 4.1e+00   
+            4          | 1.7e-01   | 2.8e-01   | 4.1e-01   | 3.7e+00   | 5.7e+00   
+            5          | 2.0e-10   | 2.4e-10   | 2.9e-10   | 4.0e-10   | 4.7e-10   
+            6          | 5.8e-13   | 1.5e-12   | 2.7e-12   | 4.5e-12   | 5.5e-12   
+            7          | 2.4e-13   | 2.4e-13   | 2.5e-13   | 2.8e-12   | 4.4e-12   
+            8          | 1.0e-13   | 1.5e-13   | 2.2e-13   | 1.9e-12   | 2.9e-12   
+            9          | 1.6e-13   | 1.9e-13   | 2.3e-13   | 5.5e-13   | 7.5e-13   
+        >>> torch.allclose(X_pcg,X_true)
+        True
+
+    Tri-diagonal $A$ with storage-saving multiplication function 
+        
+        >>> n = 5
+        >>> k = 3
+        >>> Q = torch.randn(n,2,generator=rng)
+        >>> delta = torch.rand(n,generator=rng)
+        >>> A = Q@Q.T+delta.diag()
+        >>> A
+        tensor([[ 3.7335,  2.5416,  0.4532,  1.8471,  1.2511],
+                [ 2.5416,  2.5374,  0.3233,  1.5515,  0.6545],
+                [ 0.4532,  0.3233,  0.2774,  0.2474,  0.1450],
+                [ 1.8471,  1.5515,  0.2474,  3.7532, -1.1804],
+                [ 1.2511,  0.6545,  0.1450, -1.1804,  3.1788]])
+        >>> B = torch.rand(n,k,generator=rng)
+        >>> X_true = torch.linalg.solve(A,B)
+        >>> X_true
+        tensor([[ 0.0859, -0.9122,  0.5310],
+                [-0.1233,  0.7115, -0.7571],
+                [ 0.3733,  1.3716,  1.3474],
+                [ 0.0620,  0.3954,  0.0723],
+                [ 0.1599,  0.3084,  0.1209]])
+        >>> torch.allclose(A@X_true-B,torch.zeros_like(B))
+        True
+        >>> def A_mult(x):
+        ...     return Q@(Q.T@x)+delta[:,None]*x
+        >>> torch.allclose(A_mult(X_true),A@X_true)
+        True
+        >>> X_pcg = pcg(A_mult,B,verbose=None,verbose_times=False)
+            iter i     | losses_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            1          | 3.4e-01   | 4.4e-01   | 5.7e-01   | 5.7e-01   | 5.8e-01   
+            2          | 2.6e-01   | 4.4e-01   | 6.6e-01   | 7.0e-01   | 7.3e-01   
+            3          | 8.9e-02   | 1.2e-01   | 1.6e-01   | 1.7e-01   | 1.8e-01   
+            4          | 3.3e-02   | 5.3e-02   | 7.9e-02   | 8.7e-02   | 9.2e-02   
+            5          | 1.1e-14   | 1.3e-14   | 1.5e-14   | 2.4e-14   | 3.0e-14   
+        >>> torch.allclose(X_pcg,X_true)
+        True
+
+    Batched tri-diagonal $A$ with storage-saving multiplication function 
+
+        >>> n = 100
+        >>> k = 3
+        >>> Q = torch.randn(2,1,4,n,50,generator=rng)
+        >>> delta = torch.rand(2,1,4,n,generator=rng)
+        >>> A = torch.einsum("...ij,...kj->...ik",Q,Q)+delta[...,None]*torch.eye(n)
+        >>> B = torch.rand(2,6,1,n,k,generator=rng)
+        >>> X_true = torch.linalg.solve(A,B)
+        >>> torch.allclose(torch.einsum("...ij,...jk->...ik",A,X_true)-B,torch.zeros_like(B))
+        True
+        >>> def A_mult(x):
+        ...     return torch.einsum("...ij,...jk->...ik",Q,torch.einsum("...ji,...jk->...ik",Q,x))+delta[...,None]*x
+        >>> torch.allclose(A_mult(X_true),torch.einsum("...ij,...jk->...ik",A,X_true))
+        True
+        >>> X_pcg,data = pcg(A_mult,B,verbose=None,verbose_times=False,store_data_iters=None,store_all_data=True)
+            iter i     | losses_quantiles                                          
+                       | 5         | 25        | 50        | 75        | 90        
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+            0          | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   | 1.0e+00   
+            25         | 1.8e-01   | 2.1e-01   | 2.5e-01   | 3.1e-01   | 5.1e-01   
+            50         | 1.9e-02   | 3.1e-02   | 4.9e-02   | 8.1e-02   | 1.1e-01   
+            75         | 7.9e-05   | 1.8e-04   | 3.1e-04   | 7.3e-04   | 1.5e-03   
+            100        | 2.5e-06   | 1.0e-05   | 1.6e-05   | 2.2e-05   | 4.2e-05   
+            125        | 9.2e-08   | 3.0e-07   | 5.8e-07   | 1.5e-06   | 3.0e-06   
+            150        | 4.5e-10   | 2.0e-09   | 5.2e-09   | 3.8e-08   | 9.5e-08   
+            175        | 2.7e-12   | 2.0e-11   | 5.6e-11   | 1.3e-10   | 3.6e-10   
+            200        | 1.2e-13   | 4.4e-13   | 1.8e-12   | 5.2e-12   | 1.3e-11   
+            223        | 8.8e-14   | 1.1e-13   | 1.3e-13   | 1.6e-13   | 1.9e-13   
+        >>> X_pcg.shape
+        torch.Size([2, 6, 4, 100, 3])
+        >>> torch.allclose(X_pcg,X_true)
+        True
+        >>> print_data_signatures(data)
+            data['x'].shape = (2, 6, 4, 100, 3)
+            data['iterrange'].shape = (224,)
+            data['times'].shape = (224,)
+            data['losses_quantiles']
+                data['losses_quantiles']['0'].shape = (224,)
+                data['losses_quantiles']['1'].shape = (224,)
+                data['losses_quantiles']['5'].shape = (224,)
+                data['losses_quantiles']['10'].shape = (224,)
+                data['losses_quantiles']['25'].shape = (224,)
+                data['losses_quantiles']['40'].shape = (224,)
+                data['losses_quantiles']['50'].shape = (224,)
+                data['losses_quantiles']['60'].shape = (224,)
+                data['losses_quantiles']['75'].shape = (224,)
+                data['losses_quantiles']['90'].shape = (224,)
+                data['losses_quantiles']['95'].shape = (224,)
+                data['losses_quantiles']['99'].shape = (224,)
+                data['losses_quantiles']['100'].shape = (224,)
+            data['xs'].shape = (224, 2, 6, 4, 100, 3)
+            data['losses'].shape = (224, 2, 6, 4, 3)
+    """
+    if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
+            torch.get_default_dtype() = %s, but pcg often requires high precision updates. We recommend using:
+                torch.set_default_dtype(torch.float64)'''%str(torch.get_default_dtype()))
+    assert torch.get_default_dtype() in [torch.float32,torch.float64]
+    default_dtype = torch.get_default_dtype()
+    device = str(B.device)
+    default_device = str(torch.get_default_device())
+    assert B.ndim>=2, "B should have shape (...,n,k)"
+    n = B.size(-2)
+    k = B.size(-1)
+    if X0 is None: 
+        X0 = torch.zeros_like(B)
+    if isinstance(A,torch.Tensor):
+        assert A.shape[-2:]==(n,n)
+        assert torch.allclose(A.adjoint(),A)
+        matvec = lambda X: torch.einsum("...ij,...jk->...ik",A,X)
+    else:
+        assert callable(A)
+        matvec = A
+    if precond_solver is None: 
+        psolve = lambda X: X # TODO: implement more involved preconditioned solver
+    elif isinstance(precond_solver,torch.Tensor):
+        assert precond_solver.shape[-2:]==(n,n)
+        assert torch.allclose(precond_solver.adjoint(),precond_solver)
+        psolve = lambda X: torch.einsum("...ij,...jk->...ik",precond_solver,X)
+    else:
+        assert callable(precond_solver)
+        psolve = precond_solver
+    if iters is None:
+        iters = 5*n
+    assert iters>=0
+    assert iters%1==0
+    if residtol is None: 
+        if default_dtype==torch.float64:
+            residtol = 1e-12
+        elif default_dtype==torch.float32:
+            residtol = 2.5e-4
+        else:
+            raise Exception("default_dtype = %s not parsed"%str(default_dtype))
+    assert residtol>=0
+    if verbose is None: 
+        verbose = max(1,iters//20)
+    assert verbose%1==0
+    assert verbose>=0 
+    if store_data_iters is None: 
+        store_data_iters = max(1,iters//1000)
+    assert store_data_iters%1==0
+    assert store_data_iters>=0 
+    assert isinstance(store_all_data,bool)
+    assert isinstance(quantiles_losses,list)
+    assert all(0<=qt<=100 for qt in quantiles_losses)
+    assert isinstance(verbose_quantiles_losses,list)
+    assert all(qt in quantiles_losses for qt in verbose_quantiles_losses)
+    assert verbose_indent%1==0 
+    assert verbose_indent>=0
+    assert isinstance(verbose_times,bool)
+    if verbose:
+        _h_iter = "%-10s "%"iter i"
+        _h_times = "| %-10s"%"times" if verbose_times else ""
+        _s_losses_qt = ("| %-9s "*len(verbose_quantiles_losses))%tuple(str(qt) for qt in verbose_quantiles_losses)
+        _h_losses_qt = "| losses_quantiles"+" "*(len(_s_losses_qt)-len("| losses_quantiles"))
+        _h = _h_iter+_h_losses_qt+_h_times
+        _s = " "*len(_h_iter)+_s_losses_qt+("|"+" "*(len(_h_times)-1) if verbose_times else " "*len(_h_times))
+        print(" "*verbose_indent+_h)
+        print(" "*verbose_indent+_s)
+        print(" "*verbose_indent+"~"*len(_s))
+    timer = Timer(device=device)
+    timer.tic()
+    inner = lambda a,b: torch.einsum("...ij,...ij->...j",a.conj(),b) # TODO: do we need this? 
+    Anorm = 0
+    x = X0 
+    Ax = matvec(x)
+    bnorm = torch.linalg.norm(B,dim=-2) # (...,k)
+    assert Ax.shape[-2:]==(n,k)
+    batch_shape = tuple(Ax.shape[:-2])
+    if store_data_iters:
+        iterrange = []
+        times = []
+        losses = []
+        losses_quantiles = {str(qt):[] for qt in quantiles_losses}
+        if store_all_data:
+            xs = []
+    for i in range(iters+1):
+        resid = matvec(x)-B 
+        breakcond = i==iters or resid.abs().amax()<=residtol
+        loss = torch.linalg.norm(resid,dim=-2)/bnorm
+        times_i = timer.toc()
+        losses_quantiles_i = {str(qt): loss.nanquantile(qt/100) for qt in quantiles_losses}
+        if store_data_iters and (i%store_data_iters==0 or breakcond):
+            iterrange.append(i)
+            losses.append(loss.to(default_device))
+            times.append(times_i)
+            for qt in quantiles_losses:
+                losses_quantiles[str(qt)].append(losses_quantiles_i[str(qt)].to(default_device))
+            if store_all_data:
+                xs.append(x.expand(resid.shape).to(default_device))
+        if verbose and (i%verbose==0 or breakcond):
+            _s_iter = "%-10d "%i
+            _s_losses_qt = ("| %-9.1e "*len(verbose_quantiles_losses))%tuple(losses_quantiles_i[str(qt)] for qt in verbose_quantiles_losses)
+            _s_times = "| %-10.1f "%(times_i) if verbose_times else ""
+            print(" "*verbose_indent+_s_iter+_s_losses_qt+_s_times)
+        if breakcond: break 
+        if i==0:
+            r = B-Ax # (...,n,k)
+            z = psolve(r) # (...,n,k)
+            p = z
+            rz = inner(r,z)
+        else:
+            z = psolve(r)
+            rznew = inner(r,z)
+            beta = rznew/rz
+            rz = rznew 
+            p = z+beta[...,None,:]*p
+        Ap = matvec(p)
+        alpha = rz/inner(p,Ap)
+        x = x+alpha[...,None,:]*p
+        r = r-alpha[...,None,:]*Ap
+    if store_data_iters==0:
+        return x 
+    else:
+        data = {
+            "x": x.to(default_device), 
+            "iterrange": torch.tensor(iterrange,dtype=int), 
+            "times": torch.tensor(times), 
+            "losses_quantiles": {str(qt):torch.tensor(losses_quantiles[str(qt)]) for qt in quantiles_losses},
+            }
+        if store_all_data:
+            data["xs"] = torch.stack(xs,dim=0)
+            data["losses"] = torch.stack(losses,dim=0)
+        return x,data
+
 def minres(
         A,
         B,
@@ -551,7 +921,7 @@ def minres(
 
     Args:
         A (Union[torch.Tensor,callable]): Symmetric matrix `A` with shape `(...,n,n)`, or  
-            `callable(A)` where `a(x)` should return the batch matrix multiplication of `A` and `X`,  
+            `callable(A)` where `A(X)` should return the batch matrix multiplication of `A` and `X`,  
         B (torch.Tensor): Right hand side tensor $B$ with shape `(...,n,k)`
         X0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
         iters (int): number of minres iterations, defaults to `5n`. 
@@ -766,7 +1136,7 @@ def minres(
             data['losses'].shape = (177, 2, 6, 4, 3)
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
-            torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
+            torch.get_default_dtype() = %s, but minres often requires high precision updates. We recommend using:
                 torch.set_default_dtype(torch.float64)'''%str(torch.get_default_dtype()))
     assert torch.get_default_dtype() in [torch.float32,torch.float64]
     default_dtype = torch.get_default_dtype()
@@ -952,7 +1322,7 @@ def minres_qlp_cs(
 
     Args:
         A (Union[torch.Tensor,callable]): Symmetric matrix `A` with shape `(...,n,n)`, or  
-            `callable(A)` where `a(x)` should return the batch matrix multiplication of `A` and `X`,  
+            `callable(A)` where `A(X)` should return the batch matrix multiplication of `A` and `X`,  
         B (torch.Tensor): Right hand side tensor $B$ with shape `(...,n,k)`
         X0 (torch.Tensor): Initial guess for $X$ with shape `(...,n,k)`, defaults to zeros. 
         iters (int): number of minres iterations, defaults to `5n`. 
@@ -1156,7 +1526,7 @@ def minres_qlp_cs(
             data['losses'].shape = (41, 2, 6, 4, 3)
     """
     if warn and (not torch.get_default_dtype()==torch.float64): warnings.warn('''
-            torch.get_default_dtype() = %s, but lm_opt often requires high precision updates. We recommend using:
+            torch.get_default_dtype() = %s, but minres_qlp_cs often requires high precision updates. We recommend using:
                 torch.set_default_dtype(torch.float64)'''%str(torch.get_default_dtype()))
     assert torch.get_default_dtype() in [torch.float32,torch.float64]
     default_dtype = torch.get_default_dtype()

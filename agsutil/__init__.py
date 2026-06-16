@@ -2,6 +2,7 @@ __version__ = "0.1"
 
 from .algos import (
     lm_opt,
+    pcg,
     minres,
     minres_qlp_cs,
     )
